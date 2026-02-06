@@ -1,0 +1,12 @@
+- Product Vision: To provide an enterprise-grade security orchestration platform that abstracts the complexity of Jenkins and Kali Linux into a unified interface for reliable, repeatable security scanning.
+- Problem Solved: The friction and inconsistency inherent in manual security assessments and fragmented CI/CD security tooling, which prevents teams from achieving a continuous and standardized security posture.
+- Primary User: The Security-Aware Developer who needs to execute standardized security scans without mastering the underlying pipeline orchestration or security tool syntax.
+- Out of Scope:
+  - Custom security tool integration beyond the predefined 11 stages.
+  - Post-scan vulnerability remediation workflows (ticketing, patching).
+  - Production environment runtime security or application performance monitoring.
+  - Management of the underlying cloud or server infrastructure.
+- Scope-Creep Risks:
+  - Allowing dynamic pipeline reordering or addition of arbitrary tools, undermining the standardized architecture.
+  - Building native integration with external ALM/ticketing systems instead of providing a clean API/export.
+  - Expanding the platform to support alternative CI/CD backends beyond the specific Jenkins/Kali configuration.
