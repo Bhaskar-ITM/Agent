@@ -42,6 +42,8 @@ const ManualScanPage = () => {
   const isNmapSelected = selectedStages.includes('Nmap Scan');
   const isZapSelected = selectedStages.includes('ZAP Scan');
 
+  const missingRequirements = (isNmapSelected && !project?.targetIp) || (isZapSelected && !project?.targetUrl);
+
   if (loading && !project) return <div className="p-8">Loading...</div>;
   if (!project) return <div className="p-8 text-center">Project not found</div>;
 
@@ -145,7 +147,7 @@ const ManualScanPage = () => {
             </button>
             <button
               onClick={handleRun}
-              disabled={selectedStages.length === 0 || loading}
+              disabled={selectedStages.length === 0 || loading || missingRequirements}
               className="px-10 py-3 bg-slate-900 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
               <Play className="w-4 h-4 fill-current" />

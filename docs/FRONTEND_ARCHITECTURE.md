@@ -50,6 +50,7 @@ The frontend communicates via a mock REST-like service (`src/services/api.ts`):
 - **Manual Mode**: Designed for granular control.
   - Users select specific stages via checkboxes.
   - Conditional validation: Target IP and Target URL fields are highlighted/warned only if Nmap or ZAP stages are selected.
+  - **Strict Validation**: The UI prevents starting a scan if a selected stage requires a target (IP/URL) that is not configured in the project.
   - Only the selected subset of stages is executed and displayed on the status page.
 
 ## 7. Production-Quality Frontend Structure

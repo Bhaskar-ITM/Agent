@@ -50,6 +50,13 @@ export const api = {
         const updatedStages = scan.stages.map((stage, index) => {
           if (stage.status === 'SKIPPED') return stage;
 
+          // Automated mode discovery/skipping simulation
+          if (scan.mode === 'AUTOMATED') {
+            const project = getProjects().find(p => p.id === scan.projectId);
+            if (stage.name === 'Nmap Scan' && !project?.targetIp) return { ...stage, status: 'SKIPPED' as const };
+            if (stage.name === 'ZAP Scan' && !project?.targetUrl) return { ...stage, status: 'SKIPPED' as const };
+          }
+
           const stageStartTime = index * 5;
           if (elapsed > stageStartTime + 5) {
             return { ...stage, status: 'PASSED' as const, reportUrl: '#' };
