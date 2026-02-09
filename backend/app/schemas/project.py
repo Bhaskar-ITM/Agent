@@ -1,20 +1,15 @@
 from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
+from typing import Optional
 
 class ProjectCreate(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        from_attributes=True,
-    )
-
     name: str
     git_url: str
     branch: str = "main"
-    credentials: str
+    credentials_id: str
     sonar_key: str
-    target_ip: str | None = None
-    target_url: str | None = None
+    target_ip: Optional[str] = None
+    target_url: Optional[str] = None
 
 class ProjectResponse(ProjectCreate):
-    id: str
+    project_id: str
+    status: str = "CREATED"

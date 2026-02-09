@@ -11,6 +11,7 @@ const ManualScanPage = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -30,19 +31,20 @@ const ManualScanPage = () => {
   const handleRun = async () => {
     if (!id || selectedStages.length === 0) return;
     setLoading(true);
+    setError(null);
     try {
-      const scan = await api.scans.trigger(id, 'MANUAL', selectedStages);
-      navigate(`/scans/${scan.id}`);
-    } catch (err) {
+      // Mapping display names to backend IDs if needed, but here they match
+      const scan = await api.scans.trigger(id, 'MANUAL', selectedStages, project?.target_url);
+      navigate(`/scans/${scan.scan_id}`);
+    } catch (err: any) {
       console.error(err);
+      setError(err.response?.data?.detail || err.response?.data?.error || "Failed to trigger scan");
       setLoading(false);
     }
   };
 
   const isNmapSelected = selectedStages.includes('Nmap Scan');
   const isZapSelected = selectedStages.includes('ZAP Scan');
-
-  const missingRequirements = (isNmapSelected && !project?.targetIp) || (isZapSelected && !project?.targetUrl);
 
   if (loading && !project) return <div className="p-8">Loading...</div>;
   if (!project) return <div className="p-8 text-center">Project not found</div>;
@@ -56,6 +58,13 @@ const ManualScanPage = () => {
         <ChevronLeft className="w-4 h-4" />
         Back to Project Control
       </button>
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3">
+          <ShieldAlert className="w-5 h-5" />
+          <span className="font-medium">{error}</span>
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
@@ -97,12 +106,12 @@ const ManualScanPage = () => {
             ))}
           </div>
 
-          {/* Conditional Fields */}
+          {/* Conditional Fields (Reflecting project config) */}
           {(isNmapSelected || isZapSelected) && (
             <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 mb-8 space-y-6">
               <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wider">
                 <ShieldAlert className="w-4 h-4 text-amber-500" />
-                Additional Configuration Required
+                Additional Configuration Status
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -113,11 +122,11 @@ const ManualScanPage = () => {
                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
                         readOnly
-                        value={project.targetIp || 'Not set in project'}
+                        value={project.target_ip || 'Not set in project'}
                         className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed italic"
                       />
                     </div>
-                    {!project.targetIp && <p className="text-xs text-amber-600 mt-1">Warning: IP required for Nmap</p>}
+                    {!project.target_ip && <p className="text-xs text-amber-600 mt-1 italic">Will fail in Manual mode</p>}
                   </div>
                 )}
                 {isZapSelected && (
@@ -127,11 +136,11 @@ const ManualScanPage = () => {
                       <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <input
                         readOnly
-                        value={project.targetUrl || 'Not set in project'}
+                        value={project.target_url || 'Not set in project'}
                         className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed italic"
                       />
                     </div>
-                    {!project.targetUrl && <p className="text-xs text-amber-600 mt-1">Warning: URL required for ZAP</p>}
+                    {!project.target_url && <p className="text-xs text-amber-600 mt-1 italic">Will fail in Manual mode</p>}
                   </div>
                 )}
               </div>
@@ -147,7 +156,7 @@ const ManualScanPage = () => {
             </button>
             <button
               onClick={handleRun}
-              disabled={selectedStages.length === 0 || loading || missingRequirements}
+              disabled={selectedStages.length === 0 || loading}
               className="px-10 py-3 bg-slate-900 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
               <Play className="w-4 h-4 fill-current" />

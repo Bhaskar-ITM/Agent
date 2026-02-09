@@ -8,12 +8,12 @@ const CreateProjectPage = () => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    gitUrl: '',
+    git_url: '',
     branch: 'main',
-    credentials: '',
-    sonarKey: '',
-    targetIp: '',
-    targetUrl: ''
+    credentials_id: '',
+    sonar_key: '',
+    target_ip: '',
+    target_url: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,8 +74,8 @@ const CreateProjectPage = () => {
                 <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   id="git-url"
-                  name="gitUrl"
-                  value={formData.gitUrl}
+                  name="git_url"
+                  value={formData.git_url}
                   onChange={handleChange}
                   placeholder="https://github.com/org/repo.git"
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -108,8 +108,8 @@ const CreateProjectPage = () => {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   id="credentials"
-                  name="credentials"
-                  value={formData.credentials}
+                  name="credentials_id"
+                  value={formData.credentials_id}
                   onChange={handleChange}
                   placeholder="git-cred-uuid"
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -125,8 +125,8 @@ const CreateProjectPage = () => {
                 <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   id="sonar-key"
-                  name="sonarKey"
-                  value={formData.sonarKey}
+                  name="sonar_key"
+                  value={formData.sonar_key}
                   onChange={handleChange}
                   placeholder="project-unique-key"
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -146,8 +146,8 @@ const CreateProjectPage = () => {
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   id="target-ip"
-                  name="targetIp"
-                  value={formData.targetIp}
+                  name="target_ip"
+                  value={formData.target_ip}
                   onChange={handleChange}
                   placeholder="192.168.1.1"
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
@@ -162,8 +162,8 @@ const CreateProjectPage = () => {
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   id="target-url"
-                  name="targetUrl"
-                  value={formData.targetUrl}
+                  name="target_url"
+                  value={formData.target_url}
                   onChange={handleChange}
                   placeholder="https://app.example.com"
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"

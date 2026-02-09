@@ -2,31 +2,29 @@ export type ScanStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED'
 export type ScanMode = 'AUTOMATED' | 'MANUAL';
 
 export type ScanStage = {
-  name: string;
+  stage: string;
   status: ScanStatus;
-  reportUrl?: string;
+  summary?: string;
+  artifact_url?: string;
 };
 
 export type Project = {
-  id: string;
+  project_id: string;
   name: string;
-  gitUrl: string;
+  git_url: string;
   branch: string;
-  credentials: string;
-  sonarKey: string;
-  targetIp?: string;
-  targetUrl?: string;
-  lastScanStatus?: string;
-  lastScanId?: string;
+  credentials_id: string;
+  sonar_key: string;
+  target_ip?: string;
+  target_url?: string;
+  last_scan_state?: string;
 };
 
 export type Scan = {
-  id: string;
-  projectId: string;
-  mode: ScanMode;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-  stages: ScanStage[];
-  createdAt: string;
+  scan_id: string;
+  project_id: string;
+  state: 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED' | 'FAILED' | 'CANCELLED';
+  started_at?: string;
 };
 
 export const FIXED_STAGES = [

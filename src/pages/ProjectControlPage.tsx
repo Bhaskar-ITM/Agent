@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Project } from '../types';
-import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin } from 'lucide-react';
 
 const ProjectControlPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +25,7 @@ const ProjectControlPage = () => {
     setLoading(true);
     try {
       const scan = await api.scans.trigger(id, 'AUTOMATED');
-      navigate(`/scans/${scan.id}`);
+      navigate(`/scans/${scan.scan_id}`);
     } catch (err) {
       console.error(err);
       setLoading(false);
@@ -45,15 +45,6 @@ const ProjectControlPage = () => {
           <ChevronLeft className="w-4 h-4" />
           Back to Dashboard
         </button>
-        {project.lastScanId && (
-          <Link
-            to={`/scans/${project.lastScanId}`}
-            className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
-          >
-            <ExternalLink className="w-4 h-4" />
-            View Last Scan Results
-          </Link>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -68,7 +59,7 @@ const ProjectControlPage = () => {
                   <Globe className="w-3 h-3" />
                   Repository URL
                 </div>
-                <div className="text-slate-700 font-medium break-all">{project.gitUrl}</div>
+                <div className="text-slate-700 font-medium break-all">{project.git_url}</div>
               </div>
 
               <div className="space-y-1">
@@ -84,7 +75,7 @@ const ProjectControlPage = () => {
                   <ShieldCheck className="w-3 h-3" />
                   Sonar Key
                 </div>
-                <div className="text-slate-700 font-medium">{project.sonarKey}</div>
+                <div className="text-slate-700 font-medium">{project.sonar_key}</div>
               </div>
 
               <div className="space-y-1">
@@ -92,7 +83,7 @@ const ProjectControlPage = () => {
                   <MapPin className="w-3 h-3" />
                   Target IP
                 </div>
-                <div className="text-slate-700 font-medium">{project.targetIp || 'Not configured'}</div>
+                <div className="text-slate-700 font-medium">{project.target_ip || 'Not configured'}</div>
               </div>
 
               <div className="space-y-1 sm:col-span-2">
@@ -100,7 +91,7 @@ const ProjectControlPage = () => {
                   <Globe className="w-3 h-3" />
                   Target URL
                 </div>
-                <div className="text-slate-700 font-medium">{project.targetUrl || 'Not configured'}</div>
+                <div className="text-slate-700 font-medium">{project.target_url || 'Not configured'}</div>
               </div>
             </div>
           </div>
@@ -124,7 +115,7 @@ const ProjectControlPage = () => {
             <h3 className="text-lg font-bold mb-2 text-slate-200">Manual Scan</h3>
             <p className="text-slate-400 text-sm mb-6">Explicitly select which of the 11 security stages you want to execute.</p>
             <Link
-              to={`/projects/${project.id}/manual`}
+              to={`/projects/${project.project_id}/manual`}
               className="w-full bg-slate-800 text-white hover:bg-slate-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 border border-slate-700"
             >
               <Settings2 className="w-4 h-4" />

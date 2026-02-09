@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from app.schemas.scan import ScanCreate, ScanResponse
+from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
 from app.services.validation import validate_scan_request, validate_manual_targets
 from app.services.scan_orchestrator import create_scan_object, orchestrate_scan
 from app.api.projects import projects_db
@@ -51,13 +51,39 @@ def trigger_scan(scan: ScanCreate):
     # Store in DB
     scans_db[scan_obj.scan_id] = scan_obj
 
-    return scan_obj.__dict__
+    # Update last scan status for project
+    project["last_scan_state"] = scan_obj.state
+
+    return {
+        "scan_id": scan_obj.scan_id,
+        "project_id": scan_obj.project_id,
+        "state": scan_obj.state,
+        "started_at": scan_obj.started_at
+    }
 
 @router.get("/scans/{scan_id}", response_model=ScanResponse)
 def get_scan(scan_id: str):
     if scan_id not in scans_db:
         raise HTTPException(status_code=404, detail="Scan not found")
-    return scans_db[scan_id].__dict__
+    scan_obj = scans_db[scan_id]
+    return {
+        "scan_id": scan_obj.scan_id,
+        "project_id": scan_obj.project_id,
+        "state": scan_obj.state,
+        "started_at": scan_obj.started_at
+    }
+
+@router.get("/scans/{scan_id}/results", response_model=ScanResultsResponse)
+def get_scan_results(scan_id: str):
+    if scan_id not in scans_db:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    scan_obj = scans_db[scan_id]
+
+    # Map stored results to schema
+    return {
+        "scan_id": scan_obj.scan_id,
+        "results": scan_obj.stage_results
+    }
 
 @router.post("/scans/{scan_id}/callback")
 def scan_callback(scan_id: str, report: dict):

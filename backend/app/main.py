@@ -3,8 +3,8 @@ from app.api import projects, scans
 
 app = FastAPI(title="DevSecOps Control Plane API")
 
-app.include_router(projects.router, prefix="/api", tags=["projects"])
-app.include_router(scans.router, prefix="/api", tags=["scans"])
+app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
+app.include_router(scans.router, prefix="/api/v1", tags=["scans"])
 
 @app.get("/")
 def read_root():

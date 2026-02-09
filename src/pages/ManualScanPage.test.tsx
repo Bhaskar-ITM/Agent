@@ -30,14 +30,14 @@ vi.mock('../services/api', () => ({
 
 describe('ManualScanPage', () => {
   const mockProject = {
-    id: '1',
+    project_id: '1',
     name: 'Test Project',
-    gitUrl: 'https://github.com/test/repo',
+    git_url: 'https://github.com/test/repo',
     branch: 'main',
-    credentials: 'cred',
-    sonarKey: 'sonar',
-    targetIp: '1.2.3.4',
-    targetUrl: 'https://test.com'
+    credentials_id: 'cred',
+    sonar_key: 'sonar',
+    target_ip: '1.2.3.4',
+    target_url: 'https://test.com'
   };
 
   beforeEach(() => {
@@ -70,12 +70,12 @@ describe('ManualScanPage', () => {
 
     await screen.findByText('Git Checkout');
 
-    // Initially should not show "Additional Configuration Required"
-    expect(screen.queryByText('Additional Configuration Required')).not.toBeInTheDocument();
+    // Initially should not show "Additional Configuration Status" (was Required)
+    expect(screen.queryByText('Additional Configuration Status')).not.toBeInTheDocument();
 
     // Select Nmap Scan
     fireEvent.click(screen.getByText('Nmap Scan'));
-    expect(screen.getByText('Additional Configuration Required')).toBeInTheDocument();
+    expect(screen.getByText('Additional Configuration Status')).toBeInTheDocument();
     expect(screen.getByText('Target IP (for Nmap)')).toBeInTheDocument();
 
     // Select ZAP Scan

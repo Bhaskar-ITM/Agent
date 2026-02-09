@@ -1,37 +1,26 @@
 from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
 from typing import List, Optional
 from app.state.scan_state import ScanState
 from datetime import datetime
 
-class ScanBase(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        from_attributes=True,
-    )
-
-class ScanCreate(ScanBase):
+class ScanCreate(BaseModel):
     project_id: str
     mode: str  # AUTOMATED | MANUAL
     selected_stages: Optional[List[str]] = None
+    target_url: Optional[str] = None # For manual trigger overrides if allowed
 
 class StageResult(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-    name: str
+    stage: str
     status: str
-    details: Optional[str] = None
-    report_url: Optional[str] = None
-    timestamp: str
+    summary: Optional[str] = None
+    artifact_url: Optional[str] = None
 
-class ScanResponse(ScanBase):
+class ScanResponse(BaseModel):
     scan_id: str
     project_id: str
-    mode: str
-    selected_stages: List[str]
     state: ScanState
-    created_at: datetime
-    stage_results: List[StageResult] = []
+    started_at: Optional[datetime] = None
+
+class ScanResultsResponse(BaseModel):
+    scan_id: str
+    results: List[StageResult]

@@ -4,40 +4,49 @@ import pytest
 
 client = TestClient(app)
 
-def test_integration_naming():
-    # 1. Create project with camelCase field
+def test_integration_v1():
+    # 1. Create project with snake_case
     project_data = {
         "name": "Integration Project",
-        "gitUrl": "https://github.com/test/repo.git",
+        "git_url": "https://github.com/test/repo.git",
         "branch": "main",
-            "credentials": "git-cred",
-        "sonarKey": "sonar-key"
+        "credentials_id": "git-cred",
+        "sonar_key": "sonar-key"
     }
-    response = client.post("/api/projects", json=project_data)
+    response = client.post("/api/v1/projects", json=project_data)
     assert response.status_code == 200
     data = response.json()
 
-    # Assert output is camelCase
-    assert "gitUrl" in data
-    assert data["gitUrl"] == "https://github.com/test/repo.git"
-    assert "sonarKey" in data
+    # Assert output matches spec
+    assert "project_id" in data
+    assert data["status"] == "CREATED"
 
-    project_id = data["id"]
+    project_id = data["project_id"]
 
     # 2. Trigger scan
     scan_data = {
-        "projectId": project_id,
+        "project_id": project_id,
         "mode": "AUTOMATED"
     }
-    response = client.post("/api/scans", json=scan_data)
+    response = client.post("/api/v1/scans", json=scan_data)
     assert response.status_code == 200
     data = response.json()
 
-    # Assert output is camelCase
-    assert "scanId" in data
-    assert "projectId" in data
-    assert data["projectId"] == project_id
-    assert "createdAt" in data
+    # Assert output matches spec
+    assert "scan_id" in data
+    assert data["state"] in ["QUEUED", "RUNNING"]
+
+    scan_id = data["scan_id"]
+
+    # 3. Get Status
+    response = client.get(f"/api/v1/scans/{scan_id}")
+    assert response.status_code == 200
+    assert response.json()["state"] == "RUNNING" # scan_orchestrator moves to RUNNING on success
+
+    # 4. Get Results
+    response = client.get(f"/api/v1/scans/{scan_id}/results")
+    assert response.status_code == 200
+    assert "results" in response.json()
 
 if __name__ == "__main__":
     pytest.main([__file__])

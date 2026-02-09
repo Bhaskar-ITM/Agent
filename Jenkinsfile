@@ -69,12 +69,12 @@ pipeline {
                     def slurper = new JsonSlurper()
                     def project = slurper.parseText(params.PROJECT_DATA)
 
-                    env.GIT_URL = project.gitUrl
+                    env.GIT_URL = project.git_url
                     env.GIT_BRANCH = project.branch
-                    env.CREDENTIALS_ID = project.credentials
-                    env.SONAR_KEY = project.sonarKey
-                    env.TARGET_IP = project.targetIp ?: ""
-                    env.TARGET_URL = project.targetUrl ?: ""
+                    env.CREDENTIALS_ID = project.credentials_id
+                    env.SONAR_KEY = project.sonar_key
+                    env.TARGET_IP = project.target_ip ?: ""
+                    env.TARGET_URL = project.target_url ?: ""
 
                     env.MANUAL_SELECTION = params.SELECTED_STAGES
                 }
@@ -331,8 +331,8 @@ pipeline {
                 ]
                 def jsonReport = JsonOutput.toJson(finalReport)
                 echo "Final Execution Report: ${jsonReport}"
-                // Reporting back to backend Control Plane
-                sh "curl -X POST -H 'Content-Type: application/json' -d '${jsonReport}' http://backend:8000/api/scans/${params.SCAN_ID}/callback"
+                // Reporting back to backend Control Plane (v1)
+                sh "curl -X POST -H 'Content-Type: application/json' -d '${jsonReport}' http://backend:8000/api/v1/scans/${params.SCAN_ID}/callback"
             }
         }
     }
