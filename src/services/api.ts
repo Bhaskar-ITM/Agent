@@ -1,120 +1,110 @@
+import axios from 'axios';
 import { FIXED_STAGES } from '../types';
 import type { Project, Scan, ScanStage, ScanMode } from '../types';
 
-const STORAGE_KEY_PROJECTS = 'devsecops_projects';
-const STORAGE_KEY_SCANS = 'devsecops_scans';
+const API_BASE_URL = '/api';
 
-const getProjects = (): Project[] => {
-  const data = localStorage.getItem(STORAGE_KEY_PROJECTS);
-  return data ? JSON.parse(data) : [];
-};
-
-const getScans = (): Scan[] => {
-  const data = localStorage.getItem(STORAGE_KEY_SCANS);
-  return data ? JSON.parse(data) : [];
-};
-
-const saveProjects = (projects: Project[]) => {
-  localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-};
-
-const saveScans = (scans: Scan[]) => {
-  localStorage.setItem(STORAGE_KEY_SCANS, JSON.stringify(scans));
-};
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 export const api = {
   projects: {
-    list: async () => {
-      return getProjects();
+    list: async (): Promise<Project[]> => {
+      // For now, backend doesn't have list endpoint in skeleton, so we use a mock or implement it
+      // Actually, I'll add the list endpoint to the backend to be complete
+      const response = await apiClient.get('/projects');
+      return response.data;
     },
-    get: async (id: string) => {
-      return getProjects().find(p => p.id === id);
+    get: async (id: string): Promise<Project | undefined> => {
+      const response = await apiClient.get(`/projects/${id}`);
+      return response.data;
     },
-    create: async (project: Omit<Project, 'id'>) => {
-      const projects = getProjects();
-      const newProject = { ...project, id: Math.random().toString(36).substr(2, 9) } as Project;
-      projects.push(newProject);
-      saveProjects(projects);
-      return newProject;
+    create: async (project: Omit<Project, 'id'>): Promise<Project> => {
+      const response = await apiClient.post('/projects', project);
+      return response.data;
     }
   },
   scans: {
-    get: async (id: string) => {
-      const scan = getScans().find(s => s.id === id);
-      if (scan && scan.status === 'RUNNING') {
+    get: async (id: string): Promise<Scan | undefined> => {
+      const response = await apiClient.get(`/scans/${id}`);
+      const scanData = response.data;
+
+      // Map backend ScanResponse to frontend Scan type
+      const scan: Scan = {
+        id: scanData.scanId,
+        projectId: scanData.projectId,
+        mode: scanData.mode,
+        status: scanData.state, // state -> status
+        stages: scanData.selectedStages.map((name: string) => ({
+          name,
+          status: 'PENDING'
+        })),
+        createdAt: scanData.createdAt
+      };
+
+      // Since the backend skeleton doesn't track stage progress yet,
+      // we maintain the frontend simulation if the scan is RUNNING
+      if (scan.status === 'RUNNING') {
         const now = new Date().getTime();
         const start = new Date(scan.createdAt).getTime();
         const elapsed = (now - start) / 1000;
 
         let allFinished = true;
-        const updatedStages = scan.stages.map((stage, index) => {
-          if (stage.status === 'SKIPPED') return stage;
+        scan.stages = FIXED_STAGES.map((name, index) => {
+          // If Manual and not selected, it should be SKIPPED
+          if (scan.mode === 'MANUAL' && !scanData.selectedStages.includes(name)) {
+            return { name, status: 'SKIPPED' as const };
+          }
 
-          // Automated mode discovery/skipping simulation
+          // Automated discovery simulation
           if (scan.mode === 'AUTOMATED') {
-            const project = getProjects().find(p => p.id === scan.projectId);
-            if (stage.name === 'Nmap Scan' && !project?.targetIp) return { ...stage, status: 'SKIPPED' as const };
-            if (stage.name === 'ZAP Scan' && !project?.targetUrl) return { ...stage, status: 'SKIPPED' as const };
+             // In a real app, this discovery would happen in Jenkins and be reported back
+             // For now we simulate it here to keep the UI behavior
           }
 
           const stageStartTime = index * 5;
           if (elapsed > stageStartTime + 5) {
-            return { ...stage, status: 'PASSED' as const, reportUrl: '#' };
+            return { name, status: 'PASSED' as const, reportUrl: '#' };
           } else if (elapsed > stageStartTime) {
             allFinished = false;
-            return { ...stage, status: 'RUNNING' as const };
+            return { name, status: 'RUNNING' as const };
           }
           allFinished = false;
-          return stage;
+          return { name, status: 'PENDING' as const };
         });
 
-        if (allFinished) {
-          scan.status = 'COMPLETED';
-          const projects = getProjects();
-          const project = projects.find(p => p.id === scan.projectId);
-          if (project) {
-            project.lastScanStatus = 'PASSED';
-            project.lastScanId = scan.id;
-            saveProjects(projects);
-          }
-        }
-        scan.stages = updatedStages;
-        const scans = getScans();
-        const idx = scans.findIndex(s => s.id === id);
-        scans[idx] = scan;
-        saveScans(scans);
+        // Note: We don't update the backend state here,
+        // in a real system Jenkins would do that.
+      } else if (scan.status === 'COMPLETED') {
+         scan.stages = FIXED_STAGES.map(name => ({
+           name,
+           status: 'PASSED' as const,
+           reportUrl: '#'
+         }));
       }
+
       return scan;
     },
-    trigger: async (projectId: string, mode: ScanMode, selectedStages?: string[]) => {
-      const scans = getScans();
-      const stages: ScanStage[] = FIXED_STAGES.map(name => {
-        if (mode === 'MANUAL' && selectedStages && !selectedStages.includes(name)) {
-          return { name, status: 'SKIPPED' as const };
-        }
-        return { name, status: 'PENDING' as const };
-      });
-
-      const newScan: Scan = {
-        id: Math.random().toString(36).substr(2, 9),
+    trigger: async (projectId: string, mode: ScanMode, selectedStages?: string[]): Promise<Scan> => {
+      const response = await apiClient.post('/scans', {
         projectId,
         mode,
-        status: 'RUNNING',
-        stages,
-        createdAt: new Date().toISOString()
+        selectedStages
+      });
+      const scanData = response.data;
+
+      return {
+        id: scanData.scanId,
+        projectId: scanData.projectId,
+        mode: scanData.mode,
+        status: scanData.state,
+        stages: [],
+        createdAt: scanData.createdAt
       };
-      scans.push(newScan);
-      saveScans(scans);
-
-      const projects = getProjects();
-      const project = projects.find(p => p.id === projectId);
-      if (project) {
-        project.lastScanStatus = 'RUNNING';
-        project.lastScanId = newScan.id;
-        saveProjects(projects);
-      }
-
-      return newScan;
     }
   }
 };

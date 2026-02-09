@@ -52,10 +52,11 @@ const CreateProjectPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Project Name */}
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Project Name</label>
+              <label htmlFor="project-name" className="block text-sm font-semibold text-slate-700 mb-2">Project Name</label>
               <div className="relative">
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="project-name"
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
@@ -68,10 +69,11 @@ const CreateProjectPage = () => {
 
             {/* Git URL */}
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Git Repository URL</label>
+              <label htmlFor="git-url" className="block text-sm font-semibold text-slate-700 mb-2">Git Repository URL</label>
               <div className="relative">
                 <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="git-url"
                   name="gitUrl"
                   value={formData.gitUrl}
                   onChange={handleChange}
@@ -84,10 +86,11 @@ const CreateProjectPage = () => {
 
             {/* Branch */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Branch</label>
+              <label htmlFor="branch" className="block text-sm font-semibold text-slate-700 mb-2">Branch</label>
               <div className="relative">
                 <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="branch"
                   name="branch"
                   value={formData.branch}
                   onChange={handleChange}
@@ -100,10 +103,11 @@ const CreateProjectPage = () => {
 
             {/* Credentials */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Git Credentials (ID)</label>
+              <label htmlFor="credentials" className="block text-sm font-semibold text-slate-700 mb-2">Git Credentials (ID)</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="credentials"
                   name="credentials"
                   value={formData.credentials}
                   onChange={handleChange}
@@ -116,10 +120,11 @@ const CreateProjectPage = () => {
 
             {/* Sonar Key */}
             <div className="col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Sonar Project Key</label>
+              <label htmlFor="sonar-key" className="block text-sm font-semibold text-slate-700 mb-2">Sonar Project Key</label>
               <div className="relative">
                 <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="sonar-key"
                   name="sonarKey"
                   value={formData.sonarKey}
                   onChange={handleChange}
@@ -136,10 +141,11 @@ const CreateProjectPage = () => {
 
             {/* Target IP */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Target IP (for Nmap)</label>
+              <label htmlFor="target-ip" className="block text-sm font-semibold text-slate-700 mb-2">Target IP (for Nmap)</label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="target-ip"
                   name="targetIp"
                   value={formData.targetIp}
                   onChange={handleChange}
@@ -151,10 +157,11 @@ const CreateProjectPage = () => {
 
             {/* Target URL */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Target URL (for ZAP)</label>
+              <label htmlFor="target-url" className="block text-sm font-semibold text-slate-700 mb-2">Target URL (for ZAP)</label>
               <div className="relative">
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="target-url"
                   name="targetUrl"
                   value={formData.targetUrl}
                   onChange={handleChange}
