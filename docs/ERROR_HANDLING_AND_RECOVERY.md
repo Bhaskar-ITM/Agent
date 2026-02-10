@@ -1,35 +1,40 @@
+# Error Handling and Recovery Policy
+
 - Error Categories:
-  - **Validation Errors**: Client-side or API-level input issues (e.g., invalid repository URL, malformed IP address). Handled synchronously before a scan is created.
-  - **Execution Errors**: Failures within the 11 pipeline stages (e.g., tool crash, network timeout during scan, target host unreachable).
-  - **Infrastructure Errors**: Failures of the underlying platform (e.g., Jenkins offline, Kali agent disk exhaustion, connection loss between backend and orchestrator).
-  - **User-Initiated Errors**: Explicit termination of a scan by a user (Cancellation).
+  - **Validation Errors**: Issues with project setup or scan triggers (e.g., malformed Git URL, missing target IP for Nmap).
+  - **Execution Errors**: Tool-level failures during a scan (e.g., Sonar Scanner non-zero exit code, ZAP process crash).
+  - **Infrastructure Errors**: Failures in the orchestration or execution layer (e.g., Jenkins master unreachable, Kali agent disconnected, network timeout).
+  - **User-Initiated Errors**: Explicit cancellation or abort actions performed by the user.
 
 - Error-to-State Mapping:
-  - **Validation Error**: Request rejected; scan status remains `CREATED` or is not persisted.
-  - **Execution Error (Soft Fail)**: Pipeline continues; stage status marked as `FAILED`; final scan state is `COMPLETED` (with warnings).
-  - **Execution Error (Hard Fail)**: Pipeline stops; stage status marked as `FAILED`; final scan state is `FAILED`.
-  - **Infrastructure Error**: Backend detects system failure; marks active scan as `FAILED` with a system-level reason.
-  - **User-Initiated**: Backend signals Jenkins to stop; marks scan as `CANCELLED`.
+  - **Validation Errors**: Scan status is set to `FAILED` immediately without triggering the pipeline.
+  - **Execution Errors**: The current stage is marked as `FAILED`. In Automated mode, this usually sets the overall scan to `FAILED`. In Manual mode, the scan may continue to the next selected stage.
+  - **Infrastructure Errors**: If unrecoverable, the scan status is set to `FAILED`. If a heartbeat is lost for >10 minutes, the Backend marks the scan as `STALE_FAILED`.
+  - **User-Initiated Errors**: Scan status is set to `CANCELLED`. All active processes are terminated.
 
 - Partial Failure Representation:
-  - Terminal scan reports (FAILED or CANCELLED) must include results from all stages that reached a terminal status before the error.
-  - The UI summary will explicitly label the report as "Partial Results" and identify the stage where execution halted.
+  - **Passed Stages**: Retain their `PASSED` status and findings.
+  - **Active Stage**: Marked as `FAILED` with a summary indicating the nature of the interruption.
+  - **Remaining Stages**: Marked as `SKIPPED` (not `FAILED`) to indicate they were never attempted due to the prior error.
+  - **UI Display**: The status page shows the sequence of events leading to the failure, preserving visibility of completed work.
 
 - Retry & Re-run Rules:
-  - **No Resume**: Resuming a failed or cancelled scan is strictly prohibited to ensure data integrity and determinism.
-  - **Manual Re-run**: Any retry generates a completely new `scan_id` with a fresh workspace.
-  - **Idempotency Protection**: Automated retries are forbidden for active scanning stages (Nmap, ZAP) to prevent unintended denial-of-service on target systems.
+  - **Infrastructure Retry**: The system may automatically retry an Infrastructure-level stage failure exactly once if it detects a transient network blip.
+  - **No Auto-Retry**: Validation and Execution errors are never auto-retried, as they typically require human intervention or configuration changes.
+  - **Deterministic Re-runs**: "Retry" in the UI always creates a **new Scan ID**. The system never resumes an existing failed scan ID to ensure audit trail integrity.
 
 - Recovery Scenarios:
-  - **Jenkins Restart**: Backend reconciliation logic detects "lost" jobs; affected scans are transitioned to `FAILED` with the reason `SYSTEM_RESTARTED`.
-  - **Agent Crash**: Pipeline heartbeat or timeout triggers; backend marks scan as `FAILED` and releases project-level execution locks.
-  - **Network Interruption**: Backend implements transient retry logic for Jenkins API calls; if the partition persists, the scan is marked as `FAILED` with `ORCHESTRATION_TIMEOUT`.
+  - **Jenkins Restart**: Upon recovery, Jenkins checks for orphaned "Running" jobs. The Backend periodically polls for scan status; if Jenkins reports the job as "Aborted" or missing after a restart, the Backend updates the scan state to `FAILED`.
+  - **Agent Crash**: The Backend detects a loss of heartbeat from the specific execution agent. If the agent does not reconnect within a 5-minute window, active scans on that agent are transitioned to `FAILED`.
+  - **Network Interruption**: Tool-to-Backend status updates use a "retry-with-backoff" strategy. If the network is down for longer than the stage timeout, the stage fails.
 
 - User-Facing Error Communication:
-  - Map technical error codes to functional categories: "Target Connection Failed," "Source Code Access Denied," "System Capacity Reached," "Scan Cancelled by User."
-  - Prohibit the display of raw Jenkins console logs, Kali terminal outputs, or system file paths to maintain abstraction.
+  - **Functional Abstraction**: Technical stack traces (e.g., `java.lang.NullPointerException`) are never shown to the user.
+  - **Human-Readable Messages**: Errors are mapped to functional categories (e.g., "Dependency analysis failed to connect to database" instead of "SQL connection timeout").
+  - **Actionable Guidance**: Where possible, error messages suggest a fix (e.g., "Please check your Git credentials and try again").
 
 - Reliability Pitfalls & Preventive Measures:
-  - **Pitfall**: Ghost Scans (jobs that run but aren't tracked). **Measure**: Backend-enforced TTL and mandatory periodic state synchronization with Jenkins.
-  - **Pitfall**: Resource Leaks. **Measure**: Automated reaping of orphaned processes/containers and 24-hour workspace TTL on the Kali agent.
-  - **Pitfall**: Silent Failure. **Measure**: Every stage must produce a terminal status artifact (`summary.json`); absence of this artifact triggers a Hard Fail.
+  - **The "Zombie Scan"**: A scan marked as "Running" in the UI while the backend process has crashed. **Prevention**: Mandatory bidirectional heartbeats between the Backend and Execution Agent.
+  - **Silent Tool Failures**: A tool crashes but exits with code 0. **Prevention**: Explicit verification of expected tool artifacts (e.g., report files) after every stage.
+  - **Resource Exhaustion**: A tool consumes all agent memory, killing the heartbeat process. **Prevention**: Strict per-stage memory limits (cgroups) enforced on the Kali agent.
+  - **Disk Full**: Scans fail because the agent workspace is full. **Prevention**: Pre-scan disk space checks and aggressive post-scan workspace cleanup.
