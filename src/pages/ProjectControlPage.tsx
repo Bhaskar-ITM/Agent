@@ -1,0 +1,160 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { api } from '../services/api';
+import type { Project } from '../types';
+import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin } from 'lucide-react';
+
+const ProjectControlPage = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      api.projects.get(id).then(data => {
+        if (data) setProject(data);
+        setLoading(false);
+      });
+    }
+  }, [id]);
+
+  const handleRunAutomated = async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const scan = await api.scans.trigger(id, 'AUTOMATED');
+      navigate(`/scans/${scan.scan_id}`);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  if (loading && !project) return <div className="p-8">Loading project details...</div>;
+  if (!project) return <div className="p-8 text-red-500 text-center">Project not found</div>;
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Back to Dashboard
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Project Details Card */}
+        <div className="md:col-span-2 space-y-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-900 mb-6">{project.name}</h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-12">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
+                  <Globe className="w-3 h-3" />
+                  Repository URL
+                </div>
+                <div className="text-slate-700 font-medium break-all">{project.git_url}</div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
+                  <GitBranch className="w-3 h-3" />
+                  Branch
+                </div>
+                <div className="text-slate-700 font-medium">{project.branch}</div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
+                  <ShieldCheck className="w-3 h-3" />
+                  Sonar Key
+                </div>
+                <div className="text-slate-700 font-medium">{project.sonar_key}</div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
+                  <MapPin className="w-3 h-3" />
+                  Target IP
+                </div>
+                <div className="text-slate-700 font-medium">{project.target_ip || 'Not configured'}</div>
+              </div>
+
+              <div className="space-y-1 sm:col-span-2">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
+                  <Globe className="w-3 h-3" />
+                  Target URL
+                </div>
+                <div className="text-slate-700 font-medium">{project.target_url || 'Not configured'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scan Actions Card */}
+        <div className="space-y-6">
+          <div className="bg-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200">
+            <h3 className="text-lg font-bold mb-2">Automated Scan</h3>
+            <p className="text-blue-100 text-sm mb-6">Let the system decide which security stages to run based on project configuration.</p>
+            <button
+              onClick={() => setShowConfirm(true)}
+              className="w-full bg-white text-blue-600 hover:bg-blue-50 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              Run Now
+            </button>
+          </div>
+
+          <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-lg shadow-slate-200">
+            <h3 className="text-lg font-bold mb-2 text-slate-200">Manual Scan</h3>
+            <p className="text-slate-400 text-sm mb-6">Explicitly select which of the 11 security stages you want to execute.</p>
+            <Link
+              to={`/projects/${project.project_id}/manual`}
+              className="w-full bg-slate-800 text-white hover:bg-slate-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 border border-slate-700"
+            >
+              <Settings2 className="w-4 h-4" />
+              Configure
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-6">
+              <Info className="w-6 h-6 text-blue-600" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Confirm Automated Scan</h3>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              This will trigger a full automated security scan for <span className="font-semibold text-slate-900">{project.name}</span>. The system will automatically select and run relevant security stages.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 py-3 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRunAutomated}
+                className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg shadow-blue-200"
+              >
+                Confirm & Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProjectControlPage;

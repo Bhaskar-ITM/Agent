@@ -1,37 +1,49 @@
+# Result Normalization and Reporting Policy
+
 - Standard Result Schema:
-  Every stage must produce a `summary.json` following this structure:
-  - `scan_id`: Unique identifier for the scan.
-  - `stage_id`: The fixed stage key (e.g., `sonar-scanner`, `zap-scan`).
-  - `status`: Execution outcome (PASS, FAIL, WARN, SKIPPED).
-  - `findings`: An object mapping severity levels (`critical`, `high`, `medium`, `low`, `info`) to integer counts.
-  - `artifact_ref`: A UUID reference to the raw, tool-specific output file.
-  - `timestamp`: ISO-8601 completion time.
-  - `error_info`: (Optional) Detailed category and message for FAIL statuses.
+  Every scan stage must report a JSON object with the following mandatory fields:
+  - `stage_name`: String (one of the 11 fixed stages).
+  - `status`: String (standardized status).
+  - `start_time`: ISO-8601 Timestamp.
+  - `end_time`: ISO-8601 Timestamp.
+  - `summary`: Short human-readable outcome message (max 200 chars).
+  - `findings`: Object containing `critical`, `high`, `medium`, `low` counts.
+  - `report_id`: UUID reference to the sanitized HTML/PDF report.
+  - `metadata`: Key-value pair for stage-specific data (e.g., `git_commit`, `image_digest`).
 
 - Result Status Definitions:
-  - PASS: The tool executed successfully and detected zero issues above the organization's risk threshold.
-  - FAIL: A technical execution error occurred (e.g., timeout, auth failure) OR a critical quality gate was not met.
-  - WARN: The tool executed successfully but detected vulnerabilities that require review (e.g., Medium/High findings).
-  - SKIPPED: The stage was not applicable to the tech stack (Automated) or was not selected by the user (Manual).
+  - **PASS**: The tool executed successfully and found no issues exceeding the defined quality gate (e.g., zero critical/high findings).
+  - **FAIL**: The tool executed successfully but found security issues that violate the quality gate, OR the tool itself failed to execute (technical error).
+  - **WARN**: The tool found security issues that are noteworthy but do not violate the hard quality gate, OR the tool completed with non-critical warnings.
+  - **SKIPPED**: The stage was not executed because it was not selected (Manual mode) or was deemed unnecessary by the system (Automated mode).
 
 - Severity Representation & Aggregation:
-  - Tool-specific severities (e.g., Sonar's "Blocker", ZAP's "High") are mapped to the platform's standard five-tier scale.
-  - Scan-level results aggregate these counts by summing the findings from all successful stages.
+  - **Critical (Level 4)**: Immediate threat, highly exploitable (e.g., RCE, unauthenticated data leak).
+  - **High (Level 3)**: Serious vulnerability, difficult but possible to exploit (e.g., SQLi, broken auth).
+  - **Medium (Level 2)**: Moderate risk, requires specific conditions (e.g., sensitive info in logs).
+  - **Low (Level 1)**: Minor issue, information gathering, or low impact (e.g., missing security headers).
+  - **Aggregation**: The overall scan severity is the maximum severity level found across all passed/failed stages. The total count is the sum of findings across all stages.
 
 - Raw Output Referencing Rules:
-  - Raw artifacts must NEVER be exposed directly in the primary UI.
-  - The UI/Backend uses the `artifact_ref` to fetch detailed evidence only when explicitly requested by an "Advanced User."
-  - Retention of raw artifacts is separate from the lifecycle of the normalized summary data.
+  - UI and Backend must never store or display raw console logs by default.
+  - Raw outputs must be compressed and archived in a secure internal object store.
+  - The `report_id` in the schema provides a controlled link to a sanitized, formatted version of the tool's findings.
+  - Access to raw logs is restricted to "Platform Admin" roles for debugging purposes only via a dedicated secure endpoint.
 
 - Partial Result Handling:
-  - Upon pipeline failure or cancellation, the platform must ingest all available `summary.json` files from completed stages.
-  - Unfinished stages are marked as SKIPPED with a metadata flag indicating "Pipeline Aborted."
+  - If a scan is interrupted or fails mid-pipeline, the current stage must report its status as `FAIL`.
+  - All preceding completed stages must retain their `PASS`/`FAIL`/`WARN` results and findings.
+  - All subsequent stages must be marked as `SKIPPED` (not `FAIL`) to avoid false negatives in security metrics.
+  - The overall scan status becomes `FAILED`, but the partial findings remain auditable.
 
 - Automated vs Manual Result Consistency:
-  - The reporting schema is identical for both modes.
-  - In Manual mode, user-excluded stages are explicitly marked as SKIPPED to ensure the total of 11 stages is always accounted for in the report.
+  - The result schema and status definitions are identical regardless of scan mode.
+  - **Automated Scans**: The system ensures all 11 stages report a result (even if `SKIPPED` due to logic).
+  - **Manual Scans**: Only the user-selected stages report findings; non-selected stages are explicitly marked `SKIPPED`.
+  - Reporting and severity aggregation logic remains consistent to ensure security posture can be compared across different execution modes.
 
 - Result Normalization Pitfalls:
-  - Tool Leakage: Allowing tool-specific terminology (e.g., "Vulnerability" vs "Bug") to reach the executive dashboard.
-  - Severity Mismatch: Inconsistent mapping where one tool's "Medium" is treated as another's "Low."
-  - Silent Discard: Failing to report a FAILED stage status, leading users to believe an area was "clean" when it was actually not scanned.
+  - **Exit Code Reliance**: Relying solely on tool exit codes (some tools exit 0 even with vulnerabilities; others exit 1 on non-critical warnings).
+  - **Schema Drift**: Allowing tools to add arbitrary top-level fields that break UI parsers.
+  - **Timezone Inconsistency**: Reporting timestamps in local agent time instead of UTC.
+  - **Silent Failures**: Treating a tool crash as a `PASS` because no vulnerabilities were "found".
