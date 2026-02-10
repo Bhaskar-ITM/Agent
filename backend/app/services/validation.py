@@ -1,30 +1,24 @@
 from app.schemas.scan import ScanCreate
+from app.core.policies import get_policy, ValidationError
 
-def validate_scan_request(scan: ScanCreate):
-    if scan.mode not in ["AUTOMATED", "MANUAL"]:
-        raise ValueError("Invalid scan mode")
-
-    if scan.mode == "MANUAL":
-        if not scan.selected_stages:
-            raise ValueError("Manual scan requires selected stages")
-
-        # Normalize stage names to lowercase for comparison
-        stages = [s.lower() for s in scan.selected_stages]
-
-        # Note: In a real app, we'd fetch the project to check for IP/URL.
-        # This will be handled in the orchestrator or here if we pass the project.
-        # For now, we follow the skeleton's logic but keep it extensible.
+def validate_scan_request(scan: ScanCreate, project: dict):
+    """
+    Validates a scan request using the appropriate policy.
+    """
+    try:
+        policy = get_policy(scan.mode)
+        # Convert ScanCreate to dict for validation
+        payload = scan.model_dump()
+        policy.validate(payload, project)
         return True
+    except ValidationError as e:
+        raise ValueError(str(e))
 
-    return True
-
+# We can keep validate_manual_targets but it's now redundant with policy.validate
 def validate_manual_targets(selected_stages: list[str], target_ip: str | None, target_url: str | None):
-    stages = [s.lower() for s in selected_stages]
-
-    if "nmap scan" in stages or "nmap" in stages:
-        if not target_ip:
-            raise ValueError("Nmap scan requires target IP")
-
-    if "zap scan" in stages or "zap" in stages:
-        if not target_url:
-            raise ValueError("ZAP scan requires target URL")
+    # This remains for legacy compatibility or simpler use cases,
+    # but the policy object is the new standard.
+    from app.core.policies import ManualScanPolicy
+    policy = ManualScanPolicy()
+    project = {"target_ip": target_ip, "target_url": target_url}
+    policy.validate({"selected_stages": selected_stages}, project)

@@ -1,5 +1,6 @@
 from app.state.scan_state import ScanState
 from datetime import datetime
+import secrets
 
 class Scan:
     def __init__(
@@ -15,6 +16,7 @@ class Scan:
         self.mode = mode
         self.selected_stages = selected_stages or []
         self.state = state
+        self.callback_token = secrets.token_urlsafe(32)
         self.created_at = datetime.utcnow()
         self.started_at = None
         self.finished_at = None

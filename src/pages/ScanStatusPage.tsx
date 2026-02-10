@@ -86,9 +86,10 @@ const ScanStatusPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400 font-medium uppercase tracking-widest">SCAN {scan.scan_id.split('-')[0]}</span>
           <div className={`px-4 py-1 rounded-full text-sm font-bold border ${
-            scan.state === 'FINISHED' ? 'bg-green-100 text-green-700 border-green-200' :
+            scan.state === 'COMPLETED' ? 'bg-green-100 text-green-700 border-green-200' :
             scan.state === 'FAILED' ? 'bg-red-100 text-red-700 border-red-200' :
-            'bg-blue-100 text-blue-700 border-blue-200'
+            scan.state === 'RUNNING' || scan.state === 'QUEUED' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+            'bg-slate-100 text-slate-700 border-slate-200'
           }`}>
             {scan.state}
           </div>

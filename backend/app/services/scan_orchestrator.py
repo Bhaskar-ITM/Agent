@@ -14,18 +14,25 @@ def create_scan_object(project_id: str, mode: str, selected_stages: list[str] | 
         selected_stages=selected_stages,
     )
 
-    scan.state = ScanState.QUEUED
+    # Explicitly start in CREATED
+    scan.state = ScanState.CREATED
     return scan
 
 def orchestrate_scan(scan: Scan, project_data: dict):
     """
-    Handles the transition from QUEUED to RUNNING by triggering Jenkins.
+    Transitions to QUEUED, triggers Jenkins, and keeps the scan in QUEUED state.
+    The scan will transition to RUNNING when Jenkins calls back 'STARTED'.
     """
+    from app.core.state_machine import transition
+
+    # 1. Transition to QUEUED
+    transition(scan, ScanState.QUEUED)
+
+    # 2. Trigger Jenkins
     success = jenkins_service.trigger_scan_job(scan, project_data)
 
     if success:
-        scan.state = ScanState.RUNNING
-        scan.started_at = datetime.utcnow()
+        # Keep state as QUEUED as per "Queue-Only" pattern
         return True
 
     scan.state = ScanState.FAILED

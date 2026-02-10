@@ -46,6 +46,7 @@ pipeline {
 
     parameters {
         string(name: 'SCAN_ID', defaultValue: '', description: 'Unique Scan ID')
+        string(name: 'CALLBACK_TOKEN', defaultValue: '', description: 'Verification Token')
         string(name: 'MODE', defaultValue: 'AUTOMATED', description: 'Scan Mode: AUTOMATED | MANUAL')
         string(name: 'PROJECT_DATA', defaultValue: '{}', description: 'JSON string of project metadata')
         string(name: 'SELECTED_STAGES', defaultValue: '[]', description: 'JSON array of selected stages (MANUAL mode only)')
@@ -66,6 +67,10 @@ pipeline {
             steps {
                 script {
                     echo "Initializing Scan ${params.SCAN_ID} in ${params.MODE} mode"
+
+                    // Notify Backend that execution has started (Handshake)
+                    sh "curl -X POST -H 'X-Callback-Token: ${params.CALLBACK_TOKEN}' http://backend:8000/api/v1/scans/${params.SCAN_ID}/started"
+
                     def slurper = new JsonSlurper()
                     def project = slurper.parseText(params.PROJECT_DATA)
 
@@ -332,7 +337,7 @@ pipeline {
                 def jsonReport = JsonOutput.toJson(finalReport)
                 echo "Final Execution Report: ${jsonReport}"
                 // Reporting back to backend Control Plane (v1)
-                sh "curl -X POST -H 'Content-Type: application/json' -d '${jsonReport}' http://backend:8000/api/v1/scans/${params.SCAN_ID}/callback"
+                sh "curl -X POST -H 'Content-Type: application/json' -H 'X-Callback-Token: ${params.CALLBACK_TOKEN}' -d '${jsonReport}' http://backend:8000/api/v1/scans/${params.SCAN_ID}/callback"
             }
         }
     }

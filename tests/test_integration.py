@@ -38,15 +38,54 @@ def test_integration_v1():
 
     scan_id = data["scan_id"]
 
-    # 3. Get Status
+    # Peek into DB to get callback token for simulation
+    from app.api.scans import scans_db
+    callback_token = scans_db[scan_id].callback_token
+
+    # 3. Get Status - Should be QUEUED (Queue-Only pattern)
     response = client.get(f"/api/v1/scans/{scan_id}")
     assert response.status_code == 200
-    assert response.json()["state"] == "RUNNING" # scan_orchestrator moves to RUNNING on success
+    assert response.json()["state"] == "QUEUED"
 
-    # 4. Get Results
+    # 4. Simulate STARTED Handshake from Jenkins
+    response = client.post(
+        f"/api/v1/scans/{scan_id}/started",
+        headers={"X-Callback-Token": callback_token}
+    )
+    assert response.status_code == 200
+
+    # 5. Check state again - Should be RUNNING
+    response = client.get(f"/api/v1/scans/{scan_id}")
+    assert response.json()["state"] == "RUNNING"
+
+    # 6. Get Results
     response = client.get(f"/api/v1/scans/{scan_id}/results")
     assert response.status_code == 200
     assert "results" in response.json()
+
+    # 7. Callback SUCCESS
+    report = {
+        "status": "SUCCESS",
+        "stages": [{"name": "Git Checkout", "status": "PASSED"}]
+    }
+    response = client.post(
+        f"/api/v1/scans/{scan_id}/callback",
+        json=report,
+        headers={"X-Callback-Token": callback_token}
+    )
+    assert response.status_code == 200
+
+    # 8. Verify final state
+    response = client.get(f"/api/v1/scans/{scan_id}")
+    assert response.json()["state"] == "COMPLETED"
+
+    # 9. Verify invalid token rejection
+    response = client.post(
+        f"/api/v1/scans/{scan_id}/callback",
+        json=report,
+        headers={"X-Callback-Token": "wrong-token"}
+    )
+    assert response.status_code == 403
 
 if __name__ == "__main__":
     pytest.main([__file__])
