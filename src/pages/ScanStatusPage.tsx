@@ -95,18 +95,30 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        const scanData = await api.scans.get(id);
-        if (scanData && isMounted) {
-          setScan(scanData);
+        // Bolt: Parallelize API calls to reduce polling latency
+        const [scanData, stageResults] = await Promise.all([
+          api.scans.get(id),
+          api.scans.getResults(id)
+        ]);
 
-          // Optimization: Stop polling if scan has reached a terminal state
-          if (['FINISHED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
+        if (scanData && isMounted) {
+          // Bolt: Only update scan state if data has actually changed to prevent re-renders
+          setScan(prevScan => {
+            if (prevScan &&
+                prevScan.state === scanData.state &&
+                prevScan.started_at === scanData.started_at) {
+              return prevScan;
+            }
+            return scanData;
+          });
+
+          // Bolt: Stop polling if scan has reached a terminal state (COMPLETED, FINISHED, FAILED, or CANCELLED)
+          // Supporting both COMPLETED and FINISHED to handle backend/frontend state inconsistencies.
+          if (['COMPLETED', 'FINISHED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
             clearInterval(intervalId);
           }
 
-          const stageResults = await api.scans.getResults(id);
-          if (isMounted) {
-            setResults(prevResults => {
+          setResults(prevResults => {
               // Performance: Only update state if data has actually changed to prevent re-renders
               const isSame = prevResults.length === stageResults.length &&
                 prevResults.every((item, idx) =>
@@ -118,7 +130,6 @@ const ScanStatusPage = () => {
               if (isSame) return prevResults;
               return stageResults;
             });
-          }
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);
@@ -160,7 +171,7 @@ const ScanStatusPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400 font-medium uppercase tracking-widest">SCAN {scan.scan_id.split('-')[0]}</span>
           <div className={`px-4 py-1 rounded-full text-sm font-bold border ${
-            scan.state === 'FINISHED' ? 'bg-green-100 text-green-700 border-green-200' :
+            (scan.state === 'COMPLETED' || scan.state === 'FINISHED') ? 'bg-green-100 text-green-700 border-green-200' :
             scan.state === 'FAILED' ? 'bg-red-100 text-red-700 border-red-200' :
             'bg-blue-100 text-blue-700 border-blue-200'
           }`}>

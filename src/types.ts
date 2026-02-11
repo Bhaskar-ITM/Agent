@@ -1,4 +1,4 @@
-export type ScanStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED';
+export type ScanStatus = 'PENDING' | 'RUNNING' | 'PASS' | 'FAIL' | 'WARN' | 'SKIPPED' | 'PASSED';
 export type ScanMode = 'AUTOMATED' | 'MANUAL';
 
 export type ScanStage = {
@@ -23,7 +23,7 @@ export type Project = {
 export type Scan = {
   scan_id: string;
   project_id: string;
-  state: 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED' | 'FAILED' | 'CANCELLED';
+  state: 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED' | 'FAILED' | 'CANCELLED' | 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED';
   started_at?: string;
 };
 

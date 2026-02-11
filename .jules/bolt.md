@@ -7,3 +7,9 @@
 **Learning:** `useEffect` dependency arrays containing objects/arrays that are updated *within* the effect (directly or indirectly) can cause infinite loops or redundant effect restarts.
 
 **Action:** Always verify that state updates within an effect don't inadvertently trigger the same effect again. Use functional updates or separate effects to isolate different data-fetching concerns.
+
+## 2026-02-11 - Parallelization and State Alignment in Polling
+
+**Learning:** Sequential awaits in polling loops (e.g., awaiting scan status, then awaiting scan results) multiply network latency. Mismatches between frontend terminal state checks (e.g., 'FINISHED') and backend status enums (e.g., 'COMPLETED') cause "zombie" polling intervals that never clear, wasting client and server resources.
+
+**Action:** Use `Promise.all` to parallelize independent API calls in polling functions. Ensure terminal state checks in the frontend are inclusive of all possible backend success/failure enums to ensure polling correctly terminates.
