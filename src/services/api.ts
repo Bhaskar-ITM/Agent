@@ -49,6 +49,9 @@ export const api = {
         target_url
       });
       return response.data;
+    },
+    queue: async (scan_id: string): Promise<void> => {
+      await apiClient.post(`/scans/${scan_id}/queue`);
     }
   }
 };

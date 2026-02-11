@@ -25,6 +25,7 @@ const ProjectControlPage = () => {
     setLoading(true);
     try {
       const scan = await api.scans.trigger(id, 'AUTOMATED');
+      await api.scans.queue(scan.scan_id);
       navigate(`/scans/${scan.scan_id}`);
     } catch (err) {
       console.error(err);

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Header
 from datetime import datetime
 from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
 from app.services.validation import validate_scan_request
-from app.services.scan_orchestrator import create_scan_object, orchestrate_scan
+from app.services.scan_orchestrator import create_scan_object
 from app.api.projects import projects_db
 from app.core.state_machine import transition, InvalidStateTransition
 
@@ -31,12 +31,6 @@ def trigger_scan(scan: ScanCreate):
         mode=scan.mode,
         selected_stages=scan.selected_stages,
     )
-
-    # 5. Orchestrate (Handshake with Jenkins)
-    success = orchestrate_scan(scan_obj, project)
-    if not success:
-        scans_db[scan_obj.scan_id] = scan_obj
-        raise HTTPException(status_code=500, detail="Failed to trigger scan in Jenkins")
 
     # Store in DB
     scans_db[scan_obj.scan_id] = scan_obj
@@ -74,6 +68,51 @@ def get_scan_results(scan_id: str):
         "scan_id": scan_obj.scan_id,
         "results": scan_obj.stage_results
     }
+
+@router.post("/scans/{scan_id}/queue")
+def queue_scan(scan_id: str):
+    from app.state.scan_state import ScanState
+    from app.services.jenkins_service import jenkins_service
+    from app.core.handshake import build_jenkins_payload, calculate_checksum
+
+    if scan_id not in scans_db:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    scan_obj = scans_db[scan_id]
+
+    # Idempotency: If already QUEUED or beyond, return success
+    if scan_obj.state != ScanState.CREATED:
+        if scan_obj.state in [ScanState.QUEUED, ScanState.RUNNING, ScanState.COMPLETED]:
+            return {"status": "success", "state": scan_obj.state}
+        raise HTTPException(status_code=409, detail=f"Cannot queue scan in {scan_obj.state} state")
+
+    project = projects_db.get(scan_obj.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # 1. Prepare Payload and Checksum
+    payload = build_jenkins_payload(scan_obj, project)
+    checksum = calculate_checksum(payload)
+    scan_obj.payload_checksum = checksum
+
+    # 2. Transition State (Atomic-ish in memory)
+    try:
+        transition(scan_obj, ScanState.QUEUED)
+    except InvalidStateTransition as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # 3. Trigger Jenkins
+    success = jenkins_service.trigger_scan_job(scan_obj, project)
+
+    if success:
+        # Update last scan status for project
+        project["last_scan_state"] = scan_obj.state
+        return {"status": "success", "state": scan_obj.state}
+    else:
+        # Rollback
+        scan_obj.state = ScanState.CREATED
+        scan_obj.payload_checksum = None
+        raise HTTPException(status_code=500, detail="Failed to trigger Jenkins job")
 
 @router.post("/scans/{scan_id}/started")
 def scan_started(scan_id: str, x_callback_token: str = Header(None)):

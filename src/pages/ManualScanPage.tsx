@@ -35,6 +35,7 @@ const ManualScanPage = () => {
     try {
       // Mapping display names to backend IDs if needed, but here they match
       const scan = await api.scans.trigger(id, 'MANUAL', selectedStages, project?.target_url);
+      await api.scans.queue(scan.scan_id);
       navigate(`/scans/${scan.scan_id}`);
     } catch (err: any) {
       console.error(err);

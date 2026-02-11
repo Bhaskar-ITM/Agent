@@ -17,6 +17,7 @@ class Scan:
         self.selected_stages = selected_stages or []
         self.state = state
         self.callback_token = secrets.token_urlsafe(32)
+        self.payload_checksum = None
         self.created_at = datetime.utcnow()
         self.started_at = None
         self.finished_at = None
