@@ -95,30 +95,44 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        const scanData = await api.scans.get(id);
-        if (scanData && isMounted) {
-          setScan(scanData);
+        // Performance: Parallelize API calls to reduce network latency per poll tick
+        const [scanData, stageResults] = await Promise.all([
+          api.scans.get(id),
+          api.scans.getResults(id)
+        ]);
 
-          // Optimization: Stop polling if scan has reached a terminal state
-          if (['FINISHED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
+        if (!isMounted) return;
+
+        if (scanData) {
+          setScan(prevScan => {
+            // Performance: Only update state if critical metadata has changed to prevent redundant re-renders
+            const isSame = prevScan &&
+              prevScan.state === scanData.state &&
+              prevScan.started_at === scanData.started_at;
+
+            if (isSame) return prevScan;
+            return scanData;
+          });
+
+          // Optimization: Stop polling if scan has reached a terminal state (Backend uses COMPLETED)
+          if (['FINISHED', 'COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
             clearInterval(intervalId);
           }
+        }
 
-          const stageResults = await api.scans.getResults(id);
-          if (isMounted) {
-            setResults(prevResults => {
-              // Performance: Only update state if data has actually changed to prevent re-renders
-              const isSame = prevResults.length === stageResults.length &&
-                prevResults.every((item, idx) =>
-                  item.status === stageResults[idx].status &&
-                  item.summary === stageResults[idx].summary &&
-                  item.artifact_url === stageResults[idx].artifact_url
-                );
+        if (stageResults) {
+          setResults(prevResults => {
+            // Performance: Only update state if data has actually changed to prevent re-renders
+            const isSame = prevResults.length === stageResults.length &&
+              prevResults.every((item, idx) =>
+                item.status === stageResults[idx].status &&
+                item.summary === stageResults[idx].summary &&
+                item.artifact_url === stageResults[idx].artifact_url
+              );
 
-              if (isSame) return prevResults;
-              return stageResults;
-            });
-          }
+            if (isSame) return prevResults;
+            return stageResults;
+          });
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);

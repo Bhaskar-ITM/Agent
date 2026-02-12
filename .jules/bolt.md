@@ -7,3 +7,6 @@
 **Learning:** `useEffect` dependency arrays containing objects/arrays that are updated *within* the effect (directly or indirectly) can cause infinite loops or redundant effect restarts.
 
 **Action:** Always verify that state updates within an effect don't inadvertently trigger the same effect again. Use functional updates or separate effects to isolate different data-fetching concerns.
+## 2026-02-12 - Parallelizing Polling and React Re-render Optimization
+**Learning:** In a polling-based dashboard, sequential API calls multiply the latency per tick. Furthermore, React's default behavior re-renders components on every state update with a new object/array reference from an API, even if the content is identical. Parallelizing calls with `Promise.all` and implementing manual deep/property-based comparison before calling state setters significantly reduces both network bottleneck and CPU-bound UI lag.
+**Action:** Always check if polling logic can be parallelized and implement manual diffing for state updates that receive repeated data from the backend.
