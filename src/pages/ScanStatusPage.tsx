@@ -95,30 +95,40 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        const scanData = await api.scans.get(id);
-        if (scanData && isMounted) {
-          setScan(scanData);
+        // Performance: Parallelize API calls to reduce network latency per polling tick
+        const [scanData, stageResults] = await Promise.all([
+          api.scans.get(id),
+          api.scans.getResults(id)
+        ]);
 
-          // Optimization: Stop polling if scan has reached a terminal state
-          if (['FINISHED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
+        if (scanData && isMounted) {
+          setScan(prevScan => {
+            // Performance: Only update scan state if relevant properties changed to avoid redundant re-renders
+            if (prevScan?.state === scanData.state && prevScan?.started_at === scanData.started_at) {
+              return prevScan;
+            }
+            return scanData;
+          });
+
+          // Optimization: Stop polling if scan has reached a terminal state (added COMPLETED for backend consistency)
+          if (['FINISHED', 'COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
             clearInterval(intervalId);
           }
+        }
 
-          const stageResults = await api.scans.getResults(id);
-          if (isMounted) {
-            setResults(prevResults => {
-              // Performance: Only update state if data has actually changed to prevent re-renders
-              const isSame = prevResults.length === stageResults.length &&
-                prevResults.every((item, idx) =>
-                  item.status === stageResults[idx].status &&
-                  item.summary === stageResults[idx].summary &&
-                  item.artifact_url === stageResults[idx].artifact_url
-                );
+        if (stageResults && isMounted) {
+          setResults(prevResults => {
+            // Performance: Only update results if data has actually changed to prevent re-renders
+            const isSame = prevResults.length === stageResults.length &&
+              prevResults.every((item, idx) =>
+                item.status === stageResults[idx].status &&
+                item.summary === stageResults[idx].summary &&
+                item.artifact_url === stageResults[idx].artifact_url
+              );
 
-              if (isSame) return prevResults;
-              return stageResults;
-            });
-          }
+            if (isSame) return prevResults;
+            return stageResults;
+          });
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);
@@ -160,7 +170,7 @@ const ScanStatusPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400 font-medium uppercase tracking-widest">SCAN {scan.scan_id.split('-')[0]}</span>
           <div className={`px-4 py-1 rounded-full text-sm font-bold border ${
-            scan.state === 'FINISHED' ? 'bg-green-100 text-green-700 border-green-200' :
+            (scan.state === 'FINISHED' || scan.state === 'COMPLETED') ? 'bg-green-100 text-green-700 border-green-200' :
             scan.state === 'FAILED' ? 'bg-red-100 text-red-700 border-red-200' :
             'bg-blue-100 text-blue-700 border-blue-200'
           }`}>

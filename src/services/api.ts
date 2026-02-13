@@ -15,7 +15,6 @@ export const api = {
     list: async (): Promise<Project[]> => {
       try {
         const response = await apiClient.get('/projects');
-        console.log('API projects.list response:', response.data);
         return Array.isArray(response.data) ? response.data : [];
       } catch (err) {
         console.error('API projects.list error:', err);
