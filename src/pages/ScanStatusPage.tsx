@@ -95,28 +95,53 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        const scanData = await api.scans.get(id);
-        if (scanData && isMounted) {
-          setScan(scanData);
+        // Performance: Parallelize API calls to reduce network waterfall latency
+        const [scanData, stageResults] = await Promise.all([
+          api.scans.get(id),
+          api.scans.getResults(id)
+        ]);
 
-          // Optimization: Stop polling if scan has reached a terminal state
-          if (['FINISHED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
-            clearInterval(intervalId);
+        if (isMounted) {
+          if (scanData) {
+            // Performance: Only update scan state if metadata changed to prevent redundant re-renders
+            setScan(prev => {
+              if (prev && prev.state === scanData.state && prev.started_at === scanData.started_at) {
+                return prev;
+              }
+              return scanData;
+            });
+
+            // Optimization: Stop polling if scan has reached a terminal state
+            // Added 'COMPLETED' to match backend ScanState
+            if (['FINISHED', 'COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
+              clearInterval(intervalId);
+            }
           }
 
-          const stageResults = await api.scans.getResults(id);
-          if (isMounted) {
+          if (stageResults) {
             setResults(prevResults => {
-              // Performance: Only update state if data has actually changed to prevent re-renders
-              const isSame = prevResults.length === stageResults.length &&
-                prevResults.every((item, idx) =>
-                  item.status === stageResults[idx].status &&
-                  item.summary === stageResults[idx].summary &&
-                  item.artifact_url === stageResults[idx].artifact_url
-                );
+              // Performance: Fine-grained reconciliation to preserve stable object references.
+              // This maximizes React.memo efficiency for StageRow components.
+              let hasChanged = false;
+              const nextResults = stageResults.map((newItem, idx) => {
+                const prevItem = prevResults[idx];
+                if (
+                  prevItem &&
+                  prevItem.stage === newItem.stage &&
+                  prevItem.status === newItem.status &&
+                  prevItem.summary === newItem.summary &&
+                  prevItem.artifact_url === newItem.artifact_url
+                ) {
+                  return prevItem; // Keep stable reference
+                }
+                hasChanged = true;
+                return newItem;
+              });
 
-              if (isSame) return prevResults;
-              return stageResults;
+              if (!hasChanged && prevResults.length === stageResults.length) {
+                return prevResults;
+              }
+              return nextResults;
             });
           }
         }
@@ -160,7 +185,7 @@ const ScanStatusPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400 font-medium uppercase tracking-widest">SCAN {scan.scan_id.split('-')[0]}</span>
           <div className={`px-4 py-1 rounded-full text-sm font-bold border ${
-            scan.state === 'FINISHED' ? 'bg-green-100 text-green-700 border-green-200' :
+            (scan.state === 'FINISHED' || scan.state === 'COMPLETED') ? 'bg-green-100 text-green-700 border-green-200' :
             scan.state === 'FAILED' ? 'bg-red-100 text-red-700 border-red-200' :
             'bg-blue-100 text-blue-700 border-blue-200'
           }`}>
