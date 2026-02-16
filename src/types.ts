@@ -23,7 +23,7 @@ export type Project = {
 export type Scan = {
   scan_id: string;
   project_id: string;
-  state: 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED' | 'FAILED' | 'CANCELLED';
+  state: 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   started_at?: string;
 };
 
