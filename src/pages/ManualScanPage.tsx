@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { FIXED_STAGES } from '../types';
-import type { Project } from '../types';
+import { FIXED_STAGES, STAGE_ID_MAP } from '../types';
+import type { Project, StageName } from '../types';
 import { ChevronLeft, Play, ShieldAlert, CheckCircle2, Globe, MapPin } from 'lucide-react';
 
 const ManualScanPage = () => {
@@ -33,8 +33,9 @@ const ManualScanPage = () => {
     setLoading(true);
     setError(null);
     try {
-      // Mapping display names to backend IDs if needed, but here they match
-      const scan = await api.scans.trigger(id, 'MANUAL', selectedStages, project?.target_url);
+      // Map display names to backend snake_case identifiers
+      const backendStages = selectedStages.map(s => STAGE_ID_MAP[s as StageName]);
+      const scan = await api.scans.trigger(id, 'manual', backendStages);
       navigate(`/scans/${scan.scan_id}`);
     } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       console.error(err);

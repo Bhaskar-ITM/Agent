@@ -1,30 +1,40 @@
 from app.schemas.scan import ScanCreate
 
+VALID_STAGES = {
+    "git_checkout",
+    "sonar_scanner",
+    "sonar_quality_gate",
+    "npm_pip_install",
+    "dependency_check",
+    "trivy_fs_scan",
+    "docker_build",
+    "docker_push",
+    "trivy_image_scan",
+    "nmap_scan",
+    "zap_scan"
+}
+
 def validate_scan_request(scan: ScanCreate):
-    if scan.mode not in ["AUTOMATED", "MANUAL"]:
-        raise ValueError("Invalid scan mode")
+    if scan.scan_mode not in ["automated", "manual"]:
+        raise ValueError("scan_mode must be 'automated' or 'manual'")
 
-    if scan.mode == "MANUAL":
+    if scan.scan_mode == "automated":
+        if scan.selected_stages is not None:
+            raise ValueError("selected_stages must NOT be provided for automated scans")
+
+    if scan.scan_mode == "manual":
         if not scan.selected_stages:
-            raise ValueError("Manual scan requires selected stages")
+            raise ValueError("selected_stages is required and cannot be empty for manual scans")
 
-        # Normalize stage names to lowercase for comparison
-        stages = [s.lower() for s in scan.selected_stages]
+        # Check for duplicates
+        if len(scan.selected_stages) != len(set(scan.selected_stages)):
+            raise ValueError("Duplicate stages are not allowed")
 
-        # Note: In a real app, we'd fetch the project to check for IP/URL.
-        # This will be handled in the orchestrator or here if we pass the project.
-        # For now, we follow the skeleton's logic but keep it extensible.
-        return True
+        # Check for valid stage identifiers
+        for stage in scan.selected_stages:
+            if stage not in VALID_STAGES:
+                raise ValueError(f"Invalid stage identifier: {stage}")
 
     return True
 
-def validate_manual_targets(selected_stages: list[str], target_ip: str | None, target_url: str | None):
-    stages = [s.lower() for s in selected_stages]
-
-    if "nmap scan" in stages or "nmap" in stages:
-        if not target_ip:
-            raise ValueError("Nmap scan requires target IP")
-
-    if "zap scan" in stages or "zap" in stages:
-        if not target_url:
-            raise ValueError("ZAP scan requires target URL")
+# validate_manual_targets is removed as per Phase 3 rules (validation happens later)

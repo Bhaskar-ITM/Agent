@@ -1,9 +1,9 @@
-export type ScanStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED';
-export type ScanMode = 'AUTOMATED' | 'MANUAL';
+export type ScanStatus = 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'PASS' | 'WARN';
+export type ScanMode = 'automated' | 'manual';
 
 export type ScanStage = {
   stage: string;
-  status: ScanStatus;
+  status: string; // Using string to be more flexible with backend statuses
   summary?: string;
   artifact_url?: string;
 };
@@ -23,8 +23,12 @@ export type Project = {
 export type Scan = {
   scan_id: string;
   project_id: string;
-  state: 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED';
+  scan_mode: ScanMode;
+  state: 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  selected_stages?: string[];
+  created_at: string;
   started_at?: string;
+  finished_at?: string;
 };
 
 export const FIXED_STAGES = [
@@ -42,3 +46,17 @@ export const FIXED_STAGES = [
 ] as const;
 
 export type StageName = typeof FIXED_STAGES[number];
+
+export const STAGE_ID_MAP: Record<StageName, string> = {
+  'Git Checkout': 'git_checkout',
+  'Sonar Scanner': 'sonar_scanner',
+  'Sonar Quality Gate': 'sonar_quality_gate',
+  'NPM / PIP Install': 'npm_pip_install',
+  'Dependency Check': 'dependency_check',
+  'Trivy FS Scan': 'trivy_fs_scan',
+  'Docker Build': 'docker_build',
+  'Docker Push': 'docker_push',
+  'Trivy Image Scan': 'trivy_image_scan',
+  'Nmap Scan': 'nmap_scan',
+  'ZAP Scan': 'zap_scan'
+};

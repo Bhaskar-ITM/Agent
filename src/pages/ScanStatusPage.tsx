@@ -112,8 +112,7 @@ const ScanStatusPage = () => {
             });
 
             // Optimization: Stop polling if scan has reached a terminal state
-            // Added 'COMPLETED' to match backend ScanState
-            if (['FINISHED', 'COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
+            if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
               clearInterval(intervalId);
             }
           }
@@ -185,7 +184,7 @@ const ScanStatusPage = () => {
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400 font-medium uppercase tracking-widest">SCAN {scan.scan_id.split('-')[0]}</span>
           <div className={`px-4 py-1 rounded-full text-sm font-bold border ${
-            (scan.state === 'FINISHED' || scan.state === 'COMPLETED') ? 'bg-green-100 text-green-700 border-green-200' :
+            scan.state === 'COMPLETED' ? 'bg-green-100 text-green-700 border-green-200' :
             scan.state === 'FAILED' ? 'bg-red-100 text-red-700 border-red-200' :
             'bg-blue-100 text-blue-700 border-blue-200'
           }`}>
