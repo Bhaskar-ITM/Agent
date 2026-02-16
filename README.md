@@ -84,6 +84,16 @@ This repository supports environment-based deployment using Docker Compose overl
 
 ### Commands
 
+Cross-platform runner (recommended):
+
+```bash
+python run.py dev
+python run.py test
+python run.py staging
+```
+
+Makefile wrapper (optional on Unix-like systems):
+
 ```bash
 make dev
 make test
@@ -102,3 +112,8 @@ make staging
 - `.env.dev`
 - `.env.test`
 - `.env.staging`
+
+
+### Line endings
+
+Repository line endings are normalized via `.gitattributes` (`* text=auto`) for Windows/Linux/macOS consistency.

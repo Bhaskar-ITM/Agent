@@ -15,7 +15,11 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     MOCK_EXECUTION: bool = False
 
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(
+        extra="ignore",
+        env_file=".env",
+        case_sensitive=False,
+    )
 
     @model_validator(mode="after")
     def validate_runtime_rules(self):

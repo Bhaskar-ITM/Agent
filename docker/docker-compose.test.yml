@@ -15,7 +15,7 @@ services:
     volumes:
       - ../backend:/app/backend
       - ../tests:/app/backend/tests
-      - ../.test-storage:/data/artifacts
+      - ../storage/test:/app/backend/storage/test
     command: ["pytest", "-q", "tests"]
 
   postgres-test:
