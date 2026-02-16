@@ -42,6 +42,7 @@ def trigger_scan(scan: ScanCreate):
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
         "state": scan_obj.state,
+        "stage_gating": scan_obj.stage_gating,
         "started_at": scan_obj.started_at
     }
 
@@ -54,6 +55,7 @@ def get_scan(scan_id: str):
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
         "state": scan_obj.state,
+        "stage_gating": scan_obj.stage_gating,
         "started_at": scan_obj.started_at
     }
 
@@ -92,6 +94,7 @@ def queue_scan(scan_id: str):
 
     # 1. Prepare Payload and Checksum
     payload = build_jenkins_payload(scan_obj, project)
+    scan_obj.stage_gating = payload["stage_gating"]
     checksum = calculate_checksum(payload)
     scan_obj.payload_checksum = checksum
 

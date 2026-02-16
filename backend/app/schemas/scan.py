@@ -19,6 +19,7 @@ class ScanResponse(BaseModel):
     scan_id: str
     project_id: str
     state: ScanState
+    stage_gating: Optional[dict] = None
     started_at: Optional[datetime] = None
 
 class ScanResultsResponse(BaseModel):

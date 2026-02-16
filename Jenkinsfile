@@ -27,32 +27,8 @@ def recordResult(name, status, details = "", reportUrl = "") {
     ]
 }
 
-def shouldRun(stageName, mode, requestedStages) {
-    if (mode == 'MANUAL') {
-        // Find index of stageName
-        def index = STAGE_MAP.find { it.value == stageName }?.key
-        return requestedStages && requestedStages.contains(index)
-    } else {
-        // AUTOMATED MODE - Discovery logic (Deterministic)
-        switch(stageName) {
-            case 'Git Checkout': return true
-            case 'Sonar Scanner':
-                return fileExists('sonar-project.properties') || fileExists('pom.xml') || fileExists('build.gradle')
-            case 'Sonar Quality Gate':
-                return env.SONAR_SCANNER_RAN == "true"
-            case 'NPM / PIP Install':
-                return fileExists('package.json') || fileExists('requirements.txt') || fileExists('Pipfile')
-            case 'Dependency Check':
-                return fileExists('package.json') || fileExists('requirements.txt') || fileExists('Pipfile')
-            case 'Trivy FS Scan': return true
-            case 'Docker Build': return fileExists('Dockerfile')
-            case 'Docker Push': return fileExists('Dockerfile') && env.CREDENTIALS_ID
-            case 'Trivy Image Scan': return env.DOCKER_BUILD_RAN == "true"
-            case 'Nmap Scan': return true // Handled inside stage
-            case 'ZAP Scan': return true // Handled inside stage
-            default: return false
-        }
-    }
+def isEnabled(stageId, gating) {
+    return gating && gating[stageId.toString()] == "ENABLED"
 }
 
 pipeline {
@@ -70,16 +46,9 @@ pipeline {
     environment {
         SONAR_SCANNER_RAN = "false"
         DOCKER_BUILD_RAN = "false"
-        // These will be populated from payload
         SCAN_ID = ""
         CALLBACK_TOKEN = ""
-        MODE = ""
-        TARGET_IP = ""
-        TARGET_URL = ""
-        GIT_URL = ""
-        GIT_BRANCH = ""
-        CREDENTIALS_ID = ""
-        SONAR_KEY = ""
+        STAGE_GATING = "{}"
     }
 
     stages {
@@ -99,7 +68,8 @@ pipeline {
                     env.CREDENTIALS_ID = payload.git?.credentials_id ?: ""
                     env.SONAR_KEY = payload.sonar?.sonar_key ?: ""
 
-                    env.REQUESTED_STAGES = payload.requested_stages ? JsonOutput.toJson(payload.requested_stages) : "[]"
+                    // Feature 3: Gating is the only source of truth for execution
+                    env.STAGE_GATING = JsonOutput.toJson(payload.stage_gating ?: [:])
 
                     echo "Initializing Scan ${env.SCAN_ID} in ${env.MODE} mode"
 
@@ -112,10 +82,12 @@ pipeline {
         stage('Git Checkout') {
             steps {
                 script {
-                    def stageName = 'Git Checkout'
+                    def stageId = 1
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             checkout([$class: 'GitSCM', branches: [[name: env.GIT_BRANCH]], userRemoteConfigs: [[url: env.GIT_URL, credentialsId: env.CREDENTIALS_ID]]])
@@ -125,6 +97,7 @@ pipeline {
                             error "Hard failure in ${stageName}: ${e.message}"
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -134,10 +107,12 @@ pipeline {
         stage('Sonar Scanner') {
             steps {
                 script {
-                    def stageName = 'Sonar Scanner'
+                    def stageId = 2
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "sleep 2 && echo 'Sonar Scan completed for ${env.SONAR_KEY}'"
@@ -147,6 +122,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -156,10 +132,12 @@ pipeline {
         stage('Sonar Quality Gate') {
             steps {
                 script {
-                    def stageName = 'Sonar Quality Gate'
+                    def stageId = 3
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "sleep 1 && echo 'Quality Gate Passed'"
@@ -169,6 +147,7 @@ pipeline {
                             error "Quality Gate Failed: ${e.message}"
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -178,10 +157,12 @@ pipeline {
         stage('NPM / PIP Install') {
             steps {
                 script {
-                    def stageName = 'NPM / PIP Install'
+                    def stageId = 4
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             if (fileExists('package.json')) {
@@ -196,6 +177,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -205,10 +187,12 @@ pipeline {
         stage('Dependency Check') {
             steps {
                 script {
-                    def stageName = 'Dependency Check'
+                    def stageId = 5
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "sleep 2 && echo 'Dependency Check completed'"
@@ -217,6 +201,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -226,10 +211,12 @@ pipeline {
         stage('Trivy FS Scan') {
             steps {
                 script {
-                    def stageName = 'Trivy FS Scan'
+                    def stageId = 6
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "trivy fs ."
@@ -238,6 +225,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -247,10 +235,12 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    def stageName = 'Docker Build'
+                    def stageId = 7
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "docker build -t scan-${env.SCAN_ID} ."
@@ -260,6 +250,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -269,10 +260,12 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
-                    def stageName = 'Docker Push'
+                    def stageId = 8
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "echo 'Pushing image scan-${env.SCAN_ID} to registry'"
@@ -281,6 +274,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -290,10 +284,12 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 script {
-                    def stageName = 'Trivy Image Scan'
+                    def stageId = 9
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
                         try {
                             echo "Running ${stageName}..."
                             sh "trivy image scan-${env.SCAN_ID}"
@@ -302,6 +298,7 @@ pipeline {
                             recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -311,27 +308,21 @@ pipeline {
         stage('Nmap Scan') {
             steps {
                 script {
-                    def stageName = 'Nmap Scan'
+                    def stageId = 10
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
-                        if (env.TARGET_IP == "") {
-                             if (env.MODE == 'MANUAL') {
-                                 recordResult(stageName, 'FAILED', 'Missing required input: Target IP')
-                                 error "Missing required input: Target IP"
-                             } else {
-                                 recordResult(stageName, 'SKIPPED', 'Missing optional input: Target IP')
-                             }
-                        } else {
-                            try {
-                                echo "Running ${stageName} on ${env.TARGET_IP}..."
-                                sh "nmap -F ${env.TARGET_IP}"
-                                recordResult(stageName, 'PASSED', "Port scan completed", "/reports/nmap")
-                            } catch (Exception e) {
-                                recordResult(stageName, 'FAILED', e.message)
-                            }
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
+                        try {
+                            echo "Running ${stageName} on ${env.TARGET_IP}..."
+                            sh "nmap -F ${env.TARGET_IP}"
+                            recordResult(stageName, 'PASSED', "Port scan completed", "/reports/nmap")
+                        } catch (Exception e) {
+                            recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
@@ -341,27 +332,21 @@ pipeline {
         stage('ZAP Scan') {
             steps {
                 script {
-                    def stageName = 'ZAP Scan'
+                    def stageId = 11
+                    def stageName = STAGE_MAP[stageId]
                     def slurper = new JsonSlurper()
-                    def requested = slurper.parseText(env.REQUESTED_STAGES)
-                    if (shouldRun(stageName, env.MODE, requested)) {
-                        if (env.TARGET_URL == "") {
-                             if (env.MODE == 'MANUAL') {
-                                 recordResult(stageName, 'FAILED', 'Missing required input: Target URL')
-                                 error "Missing required input: Target URL"
-                             } else {
-                                 recordResult(stageName, 'SKIPPED', 'Missing optional input: Target URL')
-                             }
-                        } else {
-                            try {
-                                echo "Running ${stageName} on ${env.TARGET_URL}..."
-                                sh "zap-baseline.py -t ${env.TARGET_URL}"
-                                recordResult(stageName, 'PASSED', "Web scan completed", "/reports/zap")
-                            } catch (Exception e) {
-                                recordResult(stageName, 'FAILED', e.message)
-                            }
+                    def gating = slurper.parseText(env.STAGE_GATING)
+
+                    if (isEnabled(stageId, gating)) {
+                        try {
+                            echo "Running ${stageName} on ${env.TARGET_URL}..."
+                            sh "zap-baseline.py -t ${env.TARGET_URL}"
+                            recordResult(stageName, 'PASSED', "Web scan completed", "/reports/zap")
+                        } catch (Exception e) {
+                            recordResult(stageName, 'FAILED', e.message)
                         }
                     } else {
+                        echo "Stage ${stageName} DISABLED by gating"
                         recordResult(stageName, 'SKIPPED')
                     }
                 }
