@@ -62,7 +62,7 @@ pipeline {
     }
 
     stages {
-        stage('Initialize') {
+        stage('Git Checkout') {
             steps {
                 script {
                     echo "Initializing Scan ${params.SCAN_ID} in ${params.MODE} mode"
@@ -75,15 +75,8 @@ pipeline {
                     env.SONAR_KEY = project.sonar_key
                     env.TARGET_IP = project.target_ip ?: ""
                     env.TARGET_URL = project.target_url ?: ""
-
                     env.MANUAL_SELECTION = params.SELECTED_STAGES
-                }
-            }
-        }
 
-        stage('Git Checkout') {
-            steps {
-                script {
                     def stageName = 'Git Checkout'
                     if (shouldRun(stageName, params.MODE, env.MANUAL_SELECTION)) {
                         try {
