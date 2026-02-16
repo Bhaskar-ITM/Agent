@@ -105,17 +105,17 @@ def queue_scan(scan_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
     # 3. Trigger Jenkins
-    success = jenkins_service.trigger_scan_job(scan_obj, project)
-
-    if success:
-        # Update last scan status for project
-        project["last_scan_state"] = scan_obj.state
-        return {"status": "success", "state": scan_obj.state}
-    else:
+    try:
+        success = jenkins_service.trigger_pipeline(scan_obj, project)
+        if success:
+            # Update last scan status for project
+            project["last_scan_state"] = scan_obj.state
+            return {"status": "success", "state": scan_obj.state}
+    except Exception as e:
         # Rollback
         scan_obj.state = ScanState.CREATED
         scan_obj.payload_checksum = None
-        raise HTTPException(status_code=500, detail="Failed to trigger Jenkins job")
+        raise HTTPException(status_code=500, detail=f"Failed to trigger Jenkins job: {str(e)}")
 
 @router.post("/scans/{scan_id}/started")
 def scan_started(scan_id: str, x_callback_token: str = Header(None)):

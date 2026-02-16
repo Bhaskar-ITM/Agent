@@ -28,7 +28,9 @@ def test_integration_feature_2():
     assert response.json()["state"] == "CREATED"
 
     # 3. Queue scan (CREATED -> QUEUED)
-    response = client.post(f"/api/v1/scans/{scan_id}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        response = client.post(f"/api/v1/scans/{scan_id}/queue")
     assert response.status_code == 200
     assert response.json()["state"] == "QUEUED"
 
@@ -63,7 +65,8 @@ def test_integration_feature_2():
     response = client.post("/api/v1/scans", json=manual_scan_data)
     m_scan_id = response.json()["scan_id"]
 
-    response = client.post(f"/api/v1/scans/{m_scan_id}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        response = client.post(f"/api/v1/scans/{m_scan_id}/queue")
     assert response.status_code == 200
 
     # Verify manual payload structure (simulation check)

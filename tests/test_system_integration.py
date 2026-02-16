@@ -5,6 +5,7 @@ from app.services.jenkins_service import jenkins_service
 from app.services.scan_monitor import monitor_scans
 import pytest
 import json
+from unittest.mock import patch
 
 client = TestClient(app)
 
@@ -37,7 +38,8 @@ def test_full_automated_scan_validation():
     assert resp.json()["state"] == "CREATED"
 
     # 3. Queue Scan (Handshake start)
-    resp = client.post(f"/api/v1/scans/{scan_id}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        resp = client.post(f"/api/v1/scans/{scan_id}/queue")
     assert resp.status_code == 200
     assert scans_db[scan_id].state == "QUEUED"
     token = scans_db[scan_id].callback_token
@@ -101,7 +103,8 @@ def test_manual_scan_gating_validation():
     assert resp.status_code == 200
     sid = resp.json()["scan_id"]
 
-    client.post(f"/api/v1/scans/{sid}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid}/queue")
     gating = scans_db[sid].stage_gating
 
     assert gating["1"] == "ENABLED"
@@ -119,7 +122,8 @@ def test_failure_simulations():
 
     # Case A: Tool FAIL status
     sid_a = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
-    client.post(f"/api/v1/scans/{sid_a}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid_a}/queue")
     token_a = scans_db[sid_a].callback_token
 
     # QUEUED -> RUNNING
@@ -142,7 +146,8 @@ def test_failure_simulations():
 
     # Case C: Jenkins Aborted Mid-Pipeline
     sid_c = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
-    client.post(f"/api/v1/scans/{sid_c}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid_c}/queue")
 
     # QUEUED -> RUNNING
     jenkins_service.set_mock_status(sid_c, building=True)
@@ -161,7 +166,8 @@ def test_result_semantics_validation():
     project_data = {"name": "Integration Semantics", "git_url": "x", "branch": "x", "credentials_id": "x", "sonar_key": "x"}
     pid = client.post("/api/v1/projects", json=project_data).json()["project_id"]
     sid = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
-    client.post(f"/api/v1/scans/{sid}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid}/queue")
     token = scans_db[sid].callback_token
 
     # QUEUED -> RUNNING
@@ -197,7 +203,8 @@ def test_callback_updates_project_list():
 
     # 2. Trigger and Queue
     sid = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
-    client.post(f"/api/v1/scans/{sid}/queue")
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid}/queue")
     token = scans_db[sid].callback_token
 
     # Verify initial state in list

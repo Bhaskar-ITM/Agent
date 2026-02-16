@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { FIXED_STAGES } from '../types';
 import type { Project, Scan, ScanStage, ScanMode } from '../types';
 
 const API_BASE_URL = '/api/v1';

@@ -21,7 +21,9 @@ def test_phase_5_lifecycle_polling():
 
     resp = client.post("/api/v1/scans", json={"project_id": project_id, "mode": "AUTOMATED"})
     scan_id = resp.json()["scan_id"]
-    client.post(f"/api/v1/scans/{scan_id}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{scan_id}/queue")
 
     # State should be QUEUED
     assert scans_db[scan_id].state == "QUEUED"
@@ -49,7 +51,9 @@ def test_phase_5_failed_lifecycle():
     project_data = {"name": "Phase 5 Fail", "git_url": "x", "branch": "x", "credentials_id": "x", "sonar_key": "x"}
     pid = client.post("/api/v1/projects", json=project_data).json()["project_id"]
     sid = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
-    client.post(f"/api/v1/scans/{sid}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid}/queue")
 
     # RUNNING
     jenkins_service.set_mock_status(sid, building=True)
@@ -67,7 +71,9 @@ def test_phase_5_unstable_as_completed():
     project_data = {"name": "Phase 5 Unstable", "git_url": "x", "branch": "x", "credentials_id": "x", "sonar_key": "x"}
     pid = client.post("/api/v1/projects", json=project_data).json()["project_id"]
     sid = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
-    client.post(f"/api/v1/scans/{sid}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{sid}/queue")
 
     jenkins_service.set_mock_status(sid, building=True)
     monitor_scans(scans_db)

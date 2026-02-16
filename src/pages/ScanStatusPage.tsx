@@ -11,7 +11,6 @@ import {
   ExternalLink,
   MinusCircle,
   Activity,
-  History,
   AlertTriangle
 } from 'lucide-react';
 

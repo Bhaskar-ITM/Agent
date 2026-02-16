@@ -37,7 +37,7 @@ const ManualScanPage = () => {
       const scan = await api.scans.trigger(id, 'MANUAL', selectedStages, project?.target_url);
       await api.scans.queue(scan.scan_id);
       navigate(`/scans/${scan.scan_id}`);
-    } catch (err: any) {
+    } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       console.error(err);
       setError(err.response?.data?.detail || err.response?.data?.error || "Failed to trigger scan");
       setLoading(false);

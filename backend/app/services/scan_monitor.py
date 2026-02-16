@@ -4,6 +4,7 @@ from app.state.scan_state import ScanState
 from app.services.jenkins_service import jenkins_service
 from app.core.state_machine import transition, InvalidStateTransition
 from app.api.projects import projects_db
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +28,34 @@ def monitor_scans(scans_db):
                 transition(scan, ScanState.RUNNING)
                 scan.started_at = datetime.utcnow()
 
+                # Mock callbacks if in mock mode
+                if os.getenv("MOCK_JENKINS", "false").lower() == "true":
+                    scan.stage_results = [
+                        {"stage": "Git Checkout", "status": "PASS", "summary": "Code successfully cloned"},
+                        {"stage": "Sonar Scanner", "status": "RUNNING", "summary": "Analyzing code..."}
+                    ]
+
             # Rule: RUNNING -> COMPLETED / FAILED
             elif scan.state == ScanState.RUNNING and not building and result is not None:
                 if result in ["SUCCESS", "UNSTABLE"]:
                     logger.info(f"Scan {scan_id} detected as COMPLETED (Result: {result})")
                     transition(scan, ScanState.COMPLETED)
                     scan.completed_at = datetime.utcnow()
+
+                    # Mock terminal results if in mock mode
+                    if os.getenv("MOCK_JENKINS", "false").lower() == "true":
+                        scan.stage_results = [
+                            {"stage": "Git Checkout", "status": "PASS", "summary": "Code successfully cloned"},
+                            {"stage": "Sonar Scanner", "status": "PASS", "summary": "Quality Gate Passed", "findings": {"critical": 0, "high": 0}},
+                            {"stage": "NPM / PIP Install", "status": "PASS", "summary": "Dependencies installed"},
+                            {"stage": "Dependency Check", "status": "WARN", "summary": "Found 5 medium vulnerabilities", "findings": {"medium": 5}},
+                            {"stage": "Trivy FS Scan", "status": "PASS", "summary": "No vulnerabilities in FS"},
+                            {"stage": "Docker Build", "status": "PASS", "summary": "Image built"},
+                            {"stage": "Docker Push", "status": "PASS", "summary": "Image pushed to registry"},
+                            {"stage": "Trivy Image Scan", "status": "PASS", "summary": "No vulnerabilities in image"},
+                            {"stage": "Nmap Scan", "status": "PASS", "summary": "No open ports found", "findings": {"low": 1}},
+                            {"stage": "ZAP Scan", "status": "PASS", "summary": "Baseline scan completed", "findings": {"medium": 2}}
+                        ]
                 elif result in ["FAILURE", "ABORTED"]:
                     logger.info(f"Scan {scan_id} detected as FAILED (Result: {result})")
                     transition(scan, ScanState.FAILED)

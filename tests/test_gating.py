@@ -22,7 +22,9 @@ def test_automated_gating_no_inputs():
     scan_id = response.json()["scan_id"]
 
     # 3. Queue scan (Trigger gating computation)
-    response = client.post(f"/api/v1/scans/{scan_id}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        response = client.post(f"/api/v1/scans/{scan_id}/queue")
 
     # 4. Verify gating (Nmap 10 and ZAP 11 should be DISABLED)
     response = client.get(f"/api/v1/scans/{scan_id}")
@@ -51,7 +53,9 @@ def test_automated_gating_with_inputs():
     scan_id = response.json()["scan_id"]
 
     # 3. Queue scan
-    client.post(f"/api/v1/scans/{scan_id}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{scan_id}/queue")
 
     # 4. Verify gating (All enabled)
     response = client.get(f"/api/v1/scans/{scan_id}")
@@ -81,7 +85,9 @@ def test_manual_gating():
     scan_id = response.json()["scan_id"]
 
     # 3. Queue scan
-    client.post(f"/api/v1/scans/{scan_id}/queue")
+    from unittest.mock import patch
+    with patch("app.services.jenkins_service.jenkins_service.trigger_pipeline", return_value=True):
+        client.post(f"/api/v1/scans/{scan_id}/queue")
 
     # 4. Verify gating
     response = client.get(f"/api/v1/scans/{scan_id}")
