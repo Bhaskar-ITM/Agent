@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ManualScanPage from './ManualScanPage';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -42,7 +42,7 @@ describe('ManualScanPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (api.projects.get as any).mockResolvedValue(mockProject);
+    (api.projects.get as Mock).mockResolvedValue(mockProject);
   });
 
   it('renders all 11 stages', async () => {
