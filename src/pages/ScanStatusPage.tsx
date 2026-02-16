@@ -71,7 +71,7 @@ const StageRow = memo(({ item, index }: { item: ScanStage; index: number }) => (
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-bold transition-colors"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="w-4 h-4" aria-hidden="true" />
             View Report
           </a>
         )}
@@ -142,7 +142,6 @@ const ScanStatusPage = () => {
               if (!changed && prevResults.length === stageResults.length) return prevResults;
               return nextResults;
             });
-          });
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);
@@ -178,7 +177,7 @@ const ScanStatusPage = () => {
           to={`/projects/${scan.project_id}`}
           className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
           Back to Project
         </Link>
         <div className="flex items-center gap-3">
@@ -201,7 +200,7 @@ const ScanStatusPage = () => {
             </div>
             <div className="flex items-center gap-4 text-slate-500 text-sm">
               <div className="flex items-center gap-1">
-                <Activity className="w-4 h-4" />
+                <Activity className="w-4 h-4" aria-hidden="true" />
                 Started: {scan.started_at ? new Date(scan.started_at).toLocaleString() : 'Just now'}
               </div>
             </div>
