@@ -118,6 +118,7 @@ const ScanStatusPage = () => {
           if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
             clearInterval(intervalId);
           }
+        }
 
           if (stageResults && isMounted) {
             setResults(prevResults => {
@@ -141,7 +142,7 @@ const ScanStatusPage = () => {
               if (!changed && prevResults.length === stageResults.length) return prevResults;
               return nextResults;
             });
-          }
+          });
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);
