@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, status
 from datetime import datetime
+import logging
 from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
 from app.services.validation import validate_scan_request
 from app.services.scan_orchestrator import create_scan_object
 from app.api.projects import projects_db
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # In-memory storage for now
 scans_db = {}
@@ -90,6 +92,22 @@ def scan_callback(scan_id: str, report: dict):
         scan_obj.state = ScanState.COMPLETED
     elif jenkins_status in ["FAILURE", "ABORTED", "UNSTABLE"]:
         scan_obj.state = ScanState.FAILED
+
+    if scan_obj.state in [ScanState.COMPLETED, ScanState.FAILED]:
+        project = projects_db.get(scan_obj.project_id)
+        if project:
+            project["last_scan_state"] = scan_obj.state
+            logger.info(
+                "Updated project %s last_scan_state to %s",
+                scan_obj.project_id,
+                scan_obj.state,
+            )
+        else:
+            logger.warning(
+                "Project %s not found while syncing callback state %s",
+                scan_obj.project_id,
+                scan_obj.state,
+            )
 
     # finishedAt
     finished_at_str = report.get("finishedAt")
