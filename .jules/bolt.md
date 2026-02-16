@@ -7,3 +7,11 @@
 **Learning:** `useEffect` dependency arrays containing objects/arrays that are updated *within* the effect (directly or indirectly) can cause infinite loops or redundant effect restarts.
 
 **Action:** Always verify that state updates within an effect don't inadvertently trigger the same effect again. Use functional updates or separate effects to isolate different data-fetching concerns.
+
+## 2026-02-16 - Reference Stability in Polling
+**Learning:** Returning a new object reference in a React state setter *always* triggers a re-render, even if the data is identical. In polling views, this can lead to massive CPU waste as the entire page and its children re-render every few seconds.
+**Action:** Use reference-preserving diffing in state setters (`setResults(prev => ...)`). Only return a new array/object if data has actually changed, and reuse existing object references for unchanged items in a list to enable `React.memo` to skip child re-renders.
+
+## 2026-02-16 - Parallelizing Polling Requests
+**Learning:** Sequential `await` calls in a polling loop multiply network latency. If you fetch status then results, the total time is sum of both, which can delay the UI update.
+**Action:** Use `Promise.all` to fire independent API requests in parallel, reducing the total latency per polling tick to the slowest single request.
