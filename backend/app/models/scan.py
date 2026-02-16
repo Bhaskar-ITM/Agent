@@ -21,5 +21,5 @@ class Scan:
         self.stage_gating = {}
         self.created_at = datetime.utcnow()
         self.started_at = None
-        self.finished_at = None
+        self.completed_at = None
         self.stage_results = []

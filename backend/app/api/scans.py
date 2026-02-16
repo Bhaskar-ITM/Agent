@@ -119,7 +119,11 @@ def queue_scan(scan_id: str):
 
 @router.post("/scans/{scan_id}/started")
 def scan_started(scan_id: str, x_callback_token: str = Header(None)):
-    from app.state.scan_state import ScanState
+    """
+    Jenkins Handshake - START notification.
+    Phase 5: State is now managed by polling monitor.
+    This endpoint remains for handshake verification but does not transition state.
+    """
     if scan_id not in scans_db:
         raise HTTPException(status_code=404, detail="Scan not found")
 
@@ -128,21 +132,16 @@ def scan_started(scan_id: str, x_callback_token: str = Header(None)):
     # Verify token
     if x_callback_token != scan_obj.callback_token:
         raise HTTPException(status_code=403, detail="Invalid callback token")
-
-    try:
-        transition(scan_obj, ScanState.RUNNING)
-        scan_obj.started_at = datetime.now()
-    except InvalidStateTransition as e:
-        # If it's already running, it's fine (idempotency)
-        if scan_obj.state != ScanState.RUNNING:
-            raise HTTPException(status_code=400, detail=str(e))
 
     return {"status": "success"}
 
 @router.post("/scans/{scan_id}/callback")
 def scan_callback(scan_id: str, report: dict, x_callback_token: str = Header(None)):
-    from app.state.scan_state import ScanState
-
+    """
+    Jenkins Handshake - FINAL callback.
+    Phase 5: State is now managed by polling monitor.
+    This endpoint remains for reporting results.
+    """
     if scan_id not in scans_db:
         raise HTTPException(status_code=404, detail="Scan not found")
 
@@ -152,29 +151,14 @@ def scan_callback(scan_id: str, report: dict, x_callback_token: str = Header(Non
     if x_callback_token != scan_obj.callback_token:
         raise HTTPException(status_code=403, detail="Invalid callback token")
 
-
     # Update stage results
     scan_obj.stage_results = report.get("stages", [])
 
-    # Update state based on Jenkins result
-    jenkins_status = report.get("status")
-    next_state = None
-    if jenkins_status == "SUCCESS":
-        next_state = ScanState.COMPLETED
-    elif jenkins_status in ["FAILURE", "ABORTED", "UNSTABLE"]:
-        next_state = ScanState.FAILED
-
-    if next_state:
-        try:
-            transition(scan_obj, next_state)
-        except InvalidStateTransition as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    # finishedAt
+    # Metadata update (optional as monitor will also set these)
     finished_at_str = report.get("finishedAt")
     if finished_at_str:
         try:
-            scan_obj.finished_at = datetime.fromisoformat(finished_at_str.replace('Z', '+00:00'))
+            scan_obj.completed_at = datetime.fromisoformat(finished_at_str.replace('Z', '+00:00'))
         except:
             pass
 

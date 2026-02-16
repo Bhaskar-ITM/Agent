@@ -43,12 +43,12 @@ def test_integration_feature_2():
     assert scan_obj.payload_checksum is not None
     callback_token = scan_obj.callback_token
 
-    # 4. Simulate Handshake (QUEUED -> RUNNING)
-    response = client.post(
-        f"/api/v1/scans/{scan_id}/started",
-        headers={"X-Callback-Token": callback_token}
-    )
-    assert response.status_code == 200
+    # 4. Simulate Handshake (QUEUED -> RUNNING via polling)
+    from app.services.jenkins_service import jenkins_service
+    from app.services.scan_monitor import monitor_scans
+
+    jenkins_service.set_mock_status(scan_id, building=True)
+    monitor_scans(scans_db)
 
     # Check state
     response = client.get(f"/api/v1/scans/{scan_id}")
