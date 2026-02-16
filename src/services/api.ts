@@ -40,12 +40,11 @@ export const api = {
       const response = await apiClient.get(`/scans/${id}/results`);
       return response.data.results;
     },
-    trigger: async (project_id: string, mode: ScanMode, selected_stages?: string[], target_url?: string): Promise<Scan> => {
+    trigger: async (project_id: string, scan_mode: ScanMode, selected_stages?: string[]): Promise<Scan> => {
       const response = await apiClient.post('/scans', {
         project_id,
-        mode,
-        selected_stages,
-        target_url
+        scan_mode,
+        selected_stages
       });
       return response.data;
     }

@@ -6,13 +6,13 @@ class Scan:
         self,
         scan_id: str,
         project_id: str,
-        mode: str,  # AUTOMATED | MANUAL
-        selected_stages: list[str] | None,
+        scan_mode: str,  # automated | manual
+        selected_stages: list[str] | None = None,
         state: ScanState = ScanState.CREATED,
     ):
         self.scan_id = scan_id
         self.project_id = project_id
-        self.mode = mode
+        self.scan_mode = scan_mode
         self.selected_stages = selected_stages or []
         self.state = state
         self.created_at = datetime.utcnow()
