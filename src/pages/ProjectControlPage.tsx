@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Project } from '../types';
-import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin } from 'lucide-react';
+import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X } from 'lucide-react';
 
 const ProjectControlPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +19,16 @@ const ProjectControlPage = () => {
       });
     }
   }, [id]);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowConfirm(false);
+    };
+    if (showConfirm) {
+      window.addEventListener('keydown', handleEscape);
+    }
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showConfirm]);
 
   const handleRunAutomated = async () => {
     if (!id) return;
@@ -42,7 +52,7 @@ const ProjectControlPage = () => {
           onClick={() => navigate('/dashboard')}
           className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
           Back to Dashboard
         </button>
       </div>
@@ -56,7 +66,7 @@ const ProjectControlPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-12">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
-                  <Globe className="w-3 h-3" />
+                  <Globe className="w-3 h-3" aria-hidden="true" />
                   Repository URL
                 </div>
                 <div className="text-slate-700 font-medium break-all">{project.git_url}</div>
@@ -64,7 +74,7 @@ const ProjectControlPage = () => {
 
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
-                  <GitBranch className="w-3 h-3" />
+                  <GitBranch className="w-3 h-3" aria-hidden="true" />
                   Branch
                 </div>
                 <div className="text-slate-700 font-medium">{project.branch}</div>
@@ -72,7 +82,7 @@ const ProjectControlPage = () => {
 
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
-                  <ShieldCheck className="w-3 h-3" />
+                  <ShieldCheck className="w-3 h-3" aria-hidden="true" />
                   Sonar Key
                 </div>
                 <div className="text-slate-700 font-medium">{project.sonar_key}</div>
@@ -80,7 +90,7 @@ const ProjectControlPage = () => {
 
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
-                  <MapPin className="w-3 h-3" />
+                  <MapPin className="w-3 h-3" aria-hidden="true" />
                   Target IP
                 </div>
                 <div className="text-slate-700 font-medium">{project.target_ip || 'Not configured'}</div>
@@ -88,7 +98,7 @@ const ProjectControlPage = () => {
 
               <div className="space-y-1 sm:col-span-2">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
-                  <Globe className="w-3 h-3" />
+                  <Globe className="w-3 h-3" aria-hidden="true" />
                   Target URL
                 </div>
                 <div className="text-slate-700 font-medium">{project.target_url || 'Not configured'}</div>
@@ -106,7 +116,7 @@ const ProjectControlPage = () => {
               onClick={() => setShowConfirm(true)}
               className="w-full bg-white text-blue-600 hover:bg-blue-50 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-4 h-4 fill-current" aria-hidden="true" />
               Run Now
             </button>
           </div>
@@ -118,7 +128,7 @@ const ProjectControlPage = () => {
               to={`/projects/${project.project_id}/manual`}
               className="w-full bg-slate-800 text-white hover:bg-slate-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 border border-slate-700"
             >
-              <Settings2 className="w-4 h-4" />
+              <Settings2 className="w-4 h-4" aria-hidden="true" />
               Configure
             </Link>
           </div>
@@ -127,13 +137,30 @@ const ProjectControlPage = () => {
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          onClick={() => setShowConfirm(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl animate-in zoom-in-95 duration-200 relative"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+            aria-describedby="modal-description"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100 transition-colors"
+              aria-label="Close confirmation"
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-6">
-              <Info className="w-6 h-6 text-blue-600" />
+              <Info className="w-6 h-6 text-blue-600" aria-hidden="true" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Confirm Automated Scan</h3>
-            <p className="text-slate-500 mb-8 leading-relaxed">
+            <h3 id="modal-title" className="text-xl font-bold text-slate-900 mb-2">Confirm Automated Scan</h3>
+            <p id="modal-description" className="text-slate-500 mb-8 leading-relaxed">
               This will trigger a full automated security scan for <span className="font-semibold text-slate-900">{project.name}</span>. The system will automatically select and run relevant security stages.
             </p>
             <div className="flex gap-3">
