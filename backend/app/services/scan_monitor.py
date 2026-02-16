@@ -3,6 +3,7 @@ from datetime import datetime
 from app.state.scan_state import ScanState
 from app.services.jenkins_service import jenkins_service
 from app.core.state_machine import transition, InvalidStateTransition
+from app.api.projects import projects_db
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,10 @@ def monitor_scans(scans_db):
                     logger.info(f"Scan {scan_id} detected as FAILED (Result: {result})")
                     transition(scan, ScanState.FAILED)
                     scan.completed_at = datetime.utcnow()
+
+                # Update project state
+                if scan.project_id in projects_db:
+                    projects_db[scan.project_id]["last_scan_state"] = scan.state
 
             # Additional terminal detection if build stopped but result is null (unexpected)
             elif scan.state == ScanState.RUNNING and not building and result is None:

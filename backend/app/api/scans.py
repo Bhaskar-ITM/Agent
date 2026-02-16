@@ -142,6 +142,8 @@ def scan_callback(scan_id: str, report: dict, x_callback_token: str = Header(Non
     Phase 5: State is now managed by polling monitor.
     This endpoint remains for reporting results.
     """
+    from app.state.scan_state import ScanState
+
     if scan_id not in scans_db:
         raise HTTPException(status_code=404, detail="Scan not found")
 
@@ -153,6 +155,14 @@ def scan_callback(scan_id: str, report: dict, x_callback_token: str = Header(Non
 
     # Update stage results
     scan_obj.stage_results = report.get("stages", [])
+
+    # Update project state if terminal
+    jenkins_status = report.get("status")
+    if jenkins_status and scan_obj.project_id in projects_db:
+        if jenkins_status in ["SUCCESS", "UNSTABLE"]:
+            projects_db[scan_obj.project_id]["last_scan_state"] = ScanState.COMPLETED
+        elif jenkins_status in ["FAILURE", "ABORTED"]:
+            projects_db[scan_obj.project_id]["last_scan_state"] = ScanState.FAILED
 
     # Metadata update (optional as monitor will also set these)
     finished_at_str = report.get("finishedAt")

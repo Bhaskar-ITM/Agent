@@ -20,6 +20,6 @@
 
 ## API Endpoints
 
-- `POST /api/projects`: Create a project
-- `POST /api/scans`: Trigger a scan
-- `GET /api/scans/{scan_id}`: Get scan status
+- `POST /api/v1/projects`: Create a project
+- `POST /api/v1/scans`: Trigger a scan
+- `GET /api/v1/scans/{scan_id}`: Get scan status

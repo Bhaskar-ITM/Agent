@@ -183,3 +183,33 @@ def test_result_semantics_validation():
     assert scans_db[sid].state == "COMPLETED"
     assert scans_db[sid].stage_results[0]["status"] == "WARN"
     assert scans_db[sid].stage_results[1]["status"] == "SKIPPED"
+
+def test_callback_updates_project_list():
+    """
+    Verifies that a terminal callback updates the project's last_scan_state in the listing.
+    """
+    # 1. Setup Project
+    project_data = {
+        "name": "Project for Callback Test",
+        "git_url": "x", "branch": "x", "credentials_id": "x", "sonar_key": "x"
+    }
+    pid = client.post("/api/v1/projects", json=project_data).json()["project_id"]
+
+    # 2. Trigger and Queue
+    sid = client.post("/api/v1/scans", json={"project_id": pid, "mode": "AUTOMATED"}).json()["scan_id"]
+    client.post(f"/api/v1/scans/{sid}/queue")
+    token = scans_db[sid].callback_token
+
+    # Verify initial state in list
+    projects = client.get("/api/v1/projects").json()
+    proj_in_list = next(p for p in projects if p["project_id"] == pid)
+    assert proj_in_list["last_scan_state"] == "QUEUED"
+
+    # 3. Send SUCCESS Callback
+    report = {"status": "SUCCESS", "stages": []}
+    client.post(f"/api/v1/scans/{sid}/callback", json=report, headers={"X-Callback-Token": token})
+
+    # 4. Verify project list reflects COMPLETED
+    projects = client.get("/api/v1/projects").json()
+    proj_in_list = next(p for p in projects if p["project_id"] == pid)
+    assert proj_in_list["last_scan_state"] == "COMPLETED"
