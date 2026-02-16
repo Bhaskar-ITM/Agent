@@ -93,7 +93,9 @@ def scan_callback(scan_id: str, report: dict):
     elif jenkins_status in ["FAILURE", "ABORTED", "UNSTABLE"]:
         scan_obj.state = ScanState.FAILED
 
-    if scan_obj.state in [ScanState.COMPLETED, ScanState.FAILED]:
+    # Keep project dashboard state in sync with scan terminal state.
+    terminal_states = {ScanState.COMPLETED, ScanState.FAILED}
+    if scan_obj.state in terminal_states:
         project = projects_db.get(scan_obj.project_id)
         if project:
             project["last_scan_state"] = scan_obj.state
