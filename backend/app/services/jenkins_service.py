@@ -1,11 +1,14 @@
 import logging
 from app.models.scan import Scan
+from app.infrastructure.jenkins.jenkins_client import JenkinsClient
+from app.core.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
 class JenkinsService:
     def __init__(self):
         self.should_fail = False
+        self.client = JenkinsClient()
 
     def trigger_scan_job(self, scan: Scan, project_data: dict):
         """
@@ -37,10 +40,16 @@ class JenkinsService:
             "SELECTED_STAGES": json.dumps(scan.selected_stages)
         }
 
-        # Simulate a successful handshake
-        logger.info(f"Triggering Jenkins job for scan {scan.scan_id} with payload: {payload}")
-
-        # In a real scenario, this would return the Jenkins build number or a success boolean
-        return True
+        # Centralized outbound call via standardized JenkinsClient
+        try:
+            logger.info(f"Triggering Jenkins job for scan {scan.scan_id}")
+            self.client.trigger_pipeline(
+                job_name="security-pipeline",
+                parameters=payload
+            )
+            return True
+        except ExternalServiceError as e:
+            logger.error(f"Jenkins trigger failed: {str(e)}")
+            return False
 
 jenkins_service = JenkinsService()

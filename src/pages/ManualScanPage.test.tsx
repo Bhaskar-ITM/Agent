@@ -42,8 +42,7 @@ describe('ManualScanPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api.projects.get as any).mockResolvedValue(mockProject);
+    (api.projects.get as any).mockResolvedValue(mockProject); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 
   it('renders all 11 stages', async () => {
