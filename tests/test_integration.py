@@ -1,10 +1,13 @@
 from fastapi.testclient import TestClient
 from app.main import app
 import pytest
+from unittest.mock import patch
 
 client = TestClient(app)
 
-def test_integration_v1():
+@patch("app.infrastructure.jenkins.jenkins_client.JenkinsClient.trigger_pipeline")
+def test_integration_v1(mock_trigger):
+    mock_trigger.return_value = {"status": "queued"}
     # 1. Create project with snake_case
     project_data = {
         "name": "Integration Project",
