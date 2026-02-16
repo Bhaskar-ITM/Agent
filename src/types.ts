@@ -6,6 +6,8 @@ export type ScanStage = {
   status: ScanStatus;
   summary?: string;
   artifact_url?: string;
+  findings?: Record<string, number>;
+  artifacts?: string[];
 };
 
 export type Project = {

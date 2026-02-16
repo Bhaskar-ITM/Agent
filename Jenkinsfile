@@ -17,12 +17,14 @@ def STAGE_MAP = [
     11: 'ZAP Scan'
 ]
 
-def recordResult(name, status, details = "", reportUrl = "") {
+def recordResult(name, status, details = "", reportUrl = "", findings = null, artifacts = []) {
     stageResults << [
         stage: name,
         status: status,
         summary: details,
         artifact_url: reportUrl,
+        findings: findings,
+        artifacts: artifacts,
         timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
     ]
 }
@@ -196,7 +198,9 @@ pipeline {
                         try {
                             echo "Running ${stageName}..."
                             sh "sleep 2 && echo 'Dependency Check completed'"
-                            recordResult(stageName, 'PASSED', "No critical vulnerabilities", "/reports/dependency-check")
+                            def findings = [critical: 0, high: 2, medium: 5, low: 10]
+                            def artifacts = ["dependency-check-report.html", "dependency-check-report.xml"]
+                            recordResult(stageName, 'PASSED', "Vulnerabilities found", "/reports/dependency-check", findings, artifacts)
                         } catch (Exception e) {
                             recordResult(stageName, 'FAILED', e.message)
                         }

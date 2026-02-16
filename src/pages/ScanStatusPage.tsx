@@ -134,6 +134,21 @@ const ScanStatusPage = () => {
                       <div className="text-xs text-slate-400 font-semibold mt-0.5 max-w-md">
                         {item.summary || 'Security scanning stage'}
                       </div>
+                      {item.findings && (
+                        <div className="flex gap-2 mt-2">
+                           {Object.entries(item.findings).map(([key, count]) => (
+                             (count as number) > 0 && (
+                               <span key={key} className={`text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase ${
+                                 key === 'critical' ? 'bg-red-50 text-red-600 border-red-100' :
+                                 key === 'high' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                 'bg-slate-50 text-slate-500 border-slate-200'
+                               }`}>
+                                 {key}: {count}
+                               </span>
+                             )
+                           ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

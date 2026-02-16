@@ -14,6 +14,8 @@ class StageResult(BaseModel):
     status: str
     summary: Optional[str] = None
     artifact_url: Optional[str] = None
+    findings: Optional[dict] = None  # {critical: int, high: int, ...}
+    artifacts: Optional[List[str]] = []
 
 class ScanResponse(BaseModel):
     scan_id: str
