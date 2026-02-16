@@ -19,3 +19,6 @@ class Scan:
         self.started_at = None
         self.finished_at = None
         self.stage_results = []
+        self.jenkins_build_number = None
+        self.jenkins_queue_id = None
+        self.callback_digests = set()

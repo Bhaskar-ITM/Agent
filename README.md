@@ -71,3 +71,34 @@ export default defineConfig([
   },
 ])
 ```
+
+## Deployment profiles (Dev / Test / Staging)
+
+This repository supports environment-based deployment using Docker Compose overlays and `.env` files.
+
+### Environments
+
+- **dev**: local backend/frontend/postgres, debug logging, optional Jenkins/Kali profiles.
+- **test**: isolated test database, mocked execution mode, CI-friendly test runner.
+- **staging**: persistent services with real Jenkins/Kali integration.
+
+### Commands
+
+```bash
+make dev
+make test
+make staging
+```
+
+### Compose overlays
+
+- `docker/docker-compose.yml` (base)
+- `docker/docker-compose.dev.yml`
+- `docker/docker-compose.test.yml`
+- `docker/docker-compose.staging.yml`
+
+### Environment files
+
+- `.env.dev`
+- `.env.test`
+- `.env.staging`
