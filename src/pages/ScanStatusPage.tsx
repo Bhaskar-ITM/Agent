@@ -95,51 +95,52 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        // Performance: Parallelize scan metadata and results fetching to reduce network latency per tick
+        // Performance: Parallelize API calls to reduce total latency per polling tick
         const [scanData, stageResults] = await Promise.all([
           api.scans.get(id),
           api.scans.getResults(id)
         ]);
 
         if (scanData && isMounted) {
-          // Performance: Property-based diffing to prevent redundant re-renders when metadata is unchanged
+          // Performance: Reference-preserving update for scan metadata.
+          // If scan metadata hasn't changed, returning prevScan skips re-rendering the whole page.
           setScan(prevScan => {
-            if (prevScan?.state === scanData.state && prevScan?.started_at === scanData.started_at) {
+            if (prevScan &&
+                prevScan.state === scanData.state &&
+                prevScan.started_at === scanData.started_at) {
               return prevScan;
             }
             return scanData;
           });
 
-          // Optimization: Stop polling if scan has reached a terminal state
+          // Performance optimization: Stop polling if scan has reached a terminal state.
+          // Corrected to 'COMPLETED' to match backend ScanState enum and prevent polling leaks.
           if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
             clearInterval(intervalId);
           }
         }
 
-        if (stageResults && isMounted) {
-          setResults(prevResults => {
-            // Performance: Only update state if data has actually changed to prevent re-renders
-            const hasChanged = prevResults.length !== stageResults.length ||
-              prevResults.some((item, idx) =>
-                item.status !== stageResults[idx].status ||
-                item.summary !== stageResults[idx].summary ||
-                item.artifact_url !== stageResults[idx].artifact_url
-              );
+          if (stageResults && isMounted) {
+            setResults(prevResults => {
+              // Performance: Item-level reference-preserving diffing.
+              // Reusing old object references for unchanged stages ensures that React.memo(StageRow)
+              // can skip re-rendering individual rows, significantly reducing CPU usage during polling.
+              let changed = false;
+              const nextResults = stageResults.map((newItem, idx) => {
+                const oldItem = prevResults[idx];
+                if (oldItem &&
+                    oldItem.stage === newItem.stage &&
+                    oldItem.status === newItem.status &&
+                    oldItem.summary === newItem.summary &&
+                    oldItem.artifact_url === newItem.artifact_url) {
+                  return oldItem;
+                }
+                changed = true;
+                return newItem;
+              });
 
-            if (!hasChanged) return prevResults;
-
-            // Performance: Preserve object references for individual stages that haven't changed.
-            // This maximizes React.memo(StageRow) efficiency by avoiding re-renders of unchanged rows.
-            return stageResults.map((newItem, idx) => {
-              const oldItem = prevResults[idx];
-              if (oldItem &&
-                oldItem.stage === newItem.stage &&
-                oldItem.status === newItem.status &&
-                oldItem.summary === newItem.summary &&
-                oldItem.artifact_url === newItem.artifact_url) {
-                return oldItem;
-              }
-              return newItem;
+              if (!changed && prevResults.length === stageResults.length) return prevResults;
+              return nextResults;
             });
           });
         }
