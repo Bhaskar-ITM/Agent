@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from datetime import datetime
 from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
-from app.services.validation import validate_scan_request, validate_manual_targets
-from app.services.scan_orchestrator import create_scan_object, orchestrate_scan
+from app.services.validation import validate_scan_request
+from app.services.scan_orchestrator import create_scan_object
 from app.api.projects import projects_db
 
 router = APIRouter()
@@ -10,7 +10,7 @@ router = APIRouter()
 # In-memory storage for now
 scans_db = {}
 
-@router.post("/scans", response_model=ScanResponse)
+@router.post("/scans", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
 def trigger_scan(scan: ScanCreate):
     # 1. Validate basic request
     try:
@@ -24,29 +24,12 @@ def trigger_scan(scan: ScanCreate):
 
     project = projects_db[scan.project_id]
 
-    # 3. Mode-specific validation
-    if scan.mode == "MANUAL":
-        try:
-            validate_manual_targets(
-                scan.selected_stages,
-                project.get("target_ip"),
-                project.get("target_url")
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    # 4. Create Scan Object
+    # 3. Create Scan Object (State = CREATED)
     scan_obj = create_scan_object(
         project_id=scan.project_id,
-        mode=scan.mode,
+        scan_mode=scan.scan_mode,
         selected_stages=scan.selected_stages,
     )
-
-    # 5. Orchestrate (Handshake with Jenkins)
-    success = orchestrate_scan(scan_obj, project)
-    if not success:
-        scans_db[scan_obj.scan_id] = scan_obj
-        raise HTTPException(status_code=500, detail="Failed to trigger scan in Jenkins")
 
     # Store in DB
     scans_db[scan_obj.scan_id] = scan_obj
@@ -57,8 +40,10 @@ def trigger_scan(scan: ScanCreate):
     return {
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
+        "scan_mode": scan_obj.scan_mode,
         "state": scan_obj.state,
-        "started_at": scan_obj.started_at
+        "selected_stages": scan_obj.selected_stages,
+        "created_at": scan_obj.created_at
     }
 
 @router.get("/scans/{scan_id}", response_model=ScanResponse)
@@ -69,8 +54,10 @@ def get_scan(scan_id: str):
     return {
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
+        "scan_mode": scan_obj.scan_mode,
         "state": scan_obj.state,
-        "started_at": scan_obj.started_at
+        "selected_stages": scan_obj.selected_stages,
+        "created_at": scan_obj.created_at
     }
 
 @router.get("/scans/{scan_id}/results", response_model=ScanResultsResponse)
