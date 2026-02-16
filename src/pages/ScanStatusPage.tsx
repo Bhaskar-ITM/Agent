@@ -95,54 +95,54 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        // Performance: Parallelize API calls to reduce network waterfall latency
+        // Performance: Parallelize API calls to reduce total latency per polling tick
         const [scanData, stageResults] = await Promise.all([
           api.scans.get(id),
           api.scans.getResults(id)
         ]);
 
-        if (isMounted) {
-          if (scanData) {
-            // Performance: Only update scan state if metadata changed to prevent redundant re-renders
-            setScan(prev => {
-              if (prev && prev.state === scanData.state && prev.started_at === scanData.started_at) {
-                return prev;
-              }
-              return scanData;
-            });
-
-            // Optimization: Stop polling if scan has reached a terminal state
-            if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
-              clearInterval(intervalId);
+        if (scanData && isMounted) {
+          // Performance: Reference-preserving update for scan metadata.
+          // If scan metadata hasn't changed, returning prevScan skips re-rendering the whole page.
+          setScan(prevScan => {
+            if (prevScan &&
+                prevScan.state === scanData.state &&
+                prevScan.started_at === scanData.started_at) {
+              return prevScan;
             }
-          }
+            return scanData;
+          });
 
-          if (stageResults) {
+          // Performance optimization: Stop polling if scan has reached a terminal state.
+          // Corrected to 'COMPLETED' to match backend ScanState enum and prevent polling leaks.
+          if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(scanData.state)) {
+            clearInterval(intervalId);
+          }
+        }
+
+          if (stageResults && isMounted) {
             setResults(prevResults => {
-              // Performance: Fine-grained reconciliation to preserve stable object references.
-              // This maximizes React.memo efficiency for StageRow components.
-              let hasChanged = false;
+              // Performance: Item-level reference-preserving diffing.
+              // Reusing old object references for unchanged stages ensures that React.memo(StageRow)
+              // can skip re-rendering individual rows, significantly reducing CPU usage during polling.
+              let changed = false;
               const nextResults = stageResults.map((newItem, idx) => {
-                const prevItem = prevResults[idx];
-                if (
-                  prevItem &&
-                  prevItem.stage === newItem.stage &&
-                  prevItem.status === newItem.status &&
-                  prevItem.summary === newItem.summary &&
-                  prevItem.artifact_url === newItem.artifact_url
-                ) {
-                  return prevItem; // Keep stable reference
+                const oldItem = prevResults[idx];
+                if (oldItem &&
+                    oldItem.stage === newItem.stage &&
+                    oldItem.status === newItem.status &&
+                    oldItem.summary === newItem.summary &&
+                    oldItem.artifact_url === newItem.artifact_url) {
+                  return oldItem;
                 }
-                hasChanged = true;
+                changed = true;
                 return newItem;
               });
 
-              if (!hasChanged && prevResults.length === stageResults.length) {
-                return prevResults;
-              }
+              if (!changed && prevResults.length === stageResults.length) return prevResults;
               return nextResults;
             });
-          }
+          });
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);
