@@ -36,7 +36,7 @@ const ManualScanPage = () => {
       // Mapping display names to backend IDs if needed, but here they match
       const scan = await api.scans.trigger(id, 'MANUAL', selectedStages, project?.target_url);
       navigate(`/scans/${scan.scan_id}`);
-    } catch (err: any) {
+    } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       console.error(err);
       setError(err.response?.data?.detail || err.response?.data?.error || "Failed to trigger scan");
       setLoading(false);
@@ -55,13 +55,13 @@ const ManualScanPage = () => {
         onClick={() => navigate(`/projects/${id}`)}
         className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
         Back to Project Control
       </button>
 
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3">
-          <ShieldAlert className="w-5 h-5" />
+          <ShieldAlert className="w-5 h-5" aria-hidden="true" />
           <span className="font-medium">{error}</span>
         </div>
       )}
@@ -82,7 +82,7 @@ const ManualScanPage = () => {
             {FIXED_STAGES.map(stage => (
               <label
                 key={stage}
-                className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 outline-none ${
                   selectedStages.includes(stage)
                     ? 'border-blue-500 bg-blue-50/50'
                     : 'border-slate-100 bg-white hover:border-slate-200'
@@ -90,14 +90,14 @@ const ManualScanPage = () => {
               >
                 <input
                   type="checkbox"
-                  className="hidden"
+                  className="sr-only"
                   checked={selectedStages.includes(stage)}
                   onChange={() => toggleStage(stage)}
                 />
                 <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
                   selectedStages.includes(stage) ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white'
                 }`}>
-                  {selectedStages.includes(stage) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                  {selectedStages.includes(stage) && <CheckCircle2 className="w-4 h-4 text-white" aria-hidden="true" />}
                 </div>
                 <span className={`font-semibold ${selectedStages.includes(stage) ? 'text-blue-900' : 'text-slate-700'}`}>
                   {stage}
@@ -110,7 +110,7 @@ const ManualScanPage = () => {
           {(isNmapSelected || isZapSelected) && (
             <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 mb-8 space-y-6">
               <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wider">
-                <ShieldAlert className="w-4 h-4 text-amber-500" />
+                <ShieldAlert className="w-4 h-4 text-amber-500" aria-hidden="true" />
                 Additional Configuration Status
               </div>
 
@@ -119,7 +119,7 @@ const ManualScanPage = () => {
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Target IP (for Nmap)</label>
                     <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
                       <input
                         readOnly
                         value={project.target_ip || 'Not set in project'}
@@ -133,7 +133,7 @@ const ManualScanPage = () => {
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Target URL (for ZAP)</label>
                     <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
                       <input
                         readOnly
                         value={project.target_url || 'Not set in project'}
@@ -159,7 +159,7 @@ const ManualScanPage = () => {
               disabled={selectedStages.length === 0 || loading}
               className="px-10 py-3 bg-slate-900 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-4 h-4 fill-current" aria-hidden="true" />
               {loading ? 'Starting Scan...' : 'Start Manual Scan'}
             </button>
           </div>
