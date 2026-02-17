@@ -1,7 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -21,19 +21,28 @@ describe('DashboardPage Search', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.projects.list as any).mockResolvedValue(mockProjects);
   });
 
-  it('filters projects based on search term', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('filters projects based on search term after debounce', async () => {
     render(
       <MemoryRouter>
         <DashboardPage />
       </MemoryRouter>
     );
 
-    // Wait for projects to load
-    expect(await screen.findByText('Alpha Project')).toBeInTheDocument();
+    // Initial load - need to wait for the promise to resolve AND the timers to run
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    expect(screen.getByText('Alpha Project')).toBeInTheDocument();
     expect(screen.getByText('Beta Project')).toBeInTheDocument();
     expect(screen.getByText('Gamma Project')).toBeInTheDocument();
 
@@ -42,24 +51,38 @@ describe('DashboardPage Search', () => {
     // Search for "Alpha"
     fireEvent.change(searchInput, { target: { value: 'Alpha' } });
 
+    // Should still show all projects before debounce
+    expect(screen.getByText('Beta Project')).toBeInTheDocument();
+
+    // Advance timers
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
     expect(screen.getByText('Alpha Project')).toBeInTheDocument();
     expect(screen.queryByText('Beta Project')).not.toBeInTheDocument();
     expect(screen.queryByText('Gamma Project')).not.toBeInTheDocument();
   });
 
-  it('shows "No projects matching" message when no results found', async () => {
+  it('shows "No projects matching" message after debounce', async () => {
     render(
       <MemoryRouter>
         <DashboardPage />
       </MemoryRouter>
     );
 
-    await screen.findByText('Alpha Project');
+    await act(async () => {
+      vi.runAllTimers();
+    });
 
     const searchInput = screen.getByLabelText('Search projects');
 
     // Search for something that doesn't exist
     fireEvent.change(searchInput, { target: { value: 'Zeta' } });
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
 
     expect(screen.queryByText('Alpha Project')).not.toBeInTheDocument();
     expect(screen.getByText(/No projects matching "Zeta"/)).toBeInTheDocument();
@@ -72,19 +95,33 @@ describe('DashboardPage Search', () => {
       </MemoryRouter>
     );
 
-    await screen.findByText('Alpha Project');
+    await act(async () => {
+      vi.runAllTimers();
+    });
 
     const searchInput = screen.getByLabelText('Search projects');
 
     // Search for "Alpha"
     fireEvent.change(searchInput, { target: { value: 'Alpha' } });
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
     expect(screen.queryByText('Beta Project')).not.toBeInTheDocument();
 
     // Click clear button
     const clearButton = screen.getByLabelText('Clear search');
     fireEvent.click(clearButton);
 
+    // Search term clears immediately
     expect(searchInput).toHaveValue('');
+
+    // List also reverts after its own debounce if we're using debouncedSearchTerm
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
     expect(screen.getByText('Alpha Project')).toBeInTheDocument();
     expect(screen.getByText('Beta Project')).toBeInTheDocument();
     expect(screen.getByText('Gamma Project')).toBeInTheDocument();

@@ -20,3 +20,7 @@
 ## 2026-02-16 - Parallelizing Polling Requests
 **Learning:** Sequential `await` calls in a polling loop multiply network latency. If you fetch status then results, the total time is sum of both, which can delay the UI update.
 **Action:** Use `Promise.all` to fire independent API requests in parallel, reducing the total latency per polling tick to the slowest single request.
+
+## 2026-02-17 - Search Debouncing and Memoized Filtering
+**Learning:** Filtering large lists on every keystroke causes cumulative UI lag as the number of items grows. Debouncing the search term by 300ms significantly reduces CPU usage and re-renders during user input. Combining this with `useMemo` for the filtered list and `React.memo` for individual list items ensures that typing only causes a single "heavy" render after the user stops, and that unchanged items don't re-render unnecessarily.
+**Action:** Implement a generic `useDebounce` hook for all search inputs. Always wrap search-based list filtering in `useMemo` and use `React.memo` for list items to maintain UI responsiveness.
