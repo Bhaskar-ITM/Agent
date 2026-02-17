@@ -1,17 +1,65 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Project } from '../types';
 import { Plus, Search, Activity, X } from 'lucide-react';
+import { useDebounce } from '../hooks/useDebounce';
+
+/**
+ * Memoized ProjectRow to prevent re-rendering when the search term changes
+ * but the project data remains identical.
+ */
+const ProjectRow = memo(({ project }: { project: Project }) => (
+  <tr className="hover:bg-slate-50 transition-colors">
+    <td className="px-6 py-4">
+      <div className="font-medium text-slate-900">{project.name}</div>
+      <div className="text-xs text-slate-500">ID: {project.project_id}</div>
+    </td>
+    <td className="px-6 py-4">
+      <div className="flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${
+          project.last_scan_state === 'COMPLETED' ? 'bg-green-500' :
+          project.last_scan_state === 'FAILED' ? 'bg-red-500' :
+          project.last_scan_state === 'RUNNING' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
+        }`} />
+        <span className="text-sm font-medium text-slate-700">
+          {project.last_scan_state || 'No scans yet'}
+        </span>
+      </div>
+    </td>
+    <td className="px-6 py-4">
+      <Link
+        to={`/projects/${project.project_id}`}
+        className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+      >
+        <Activity className="w-4 h-4" />
+        Manage
+      </Link>
+    </td>
+  </tr>
+));
+
+ProjectRow.displayName = 'ProjectRow';
 
 const DashboardPage = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const filteredProjects = projects.filter(project =>
-    project.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Performance: Debounce search input to avoid re-filtering and re-renders on every keystroke
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Performance: Memoize filtered projects to avoid re-calculating on every render.
+  // We use debouncedSearchTerm to significantly reduce CPU usage during typing.
+  const filteredProjects = useMemo(() => {
+    if (!debouncedSearchTerm) return projects;
+
+    // Performance: Pre-calculate lowercase search term once per update
+    const lowerSearch = debouncedSearchTerm.toLowerCase();
+    return projects.filter(project =>
+      project.name.toLowerCase().includes(lowerSearch)
+    );
+  }, [projects, debouncedSearchTerm]);
 
   useEffect(() => {
     api.projects.list().then(data => {
@@ -67,40 +115,14 @@ const DashboardPage = () => {
             {filteredProjects.length === 0 ? (
               <tr>
                 <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
-                  {searchTerm
-                    ? `No projects matching "${searchTerm}"`
+                  {debouncedSearchTerm
+                    ? `No projects matching "${debouncedSearchTerm}"`
                     : "No projects found. Create one to get started."}
                 </td>
               </tr>
             ) : (
               filteredProjects.map(project => (
-                <tr key={project.project_id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-slate-900">{project.name}</div>
-                    <div className="text-xs text-slate-500">ID: {project.project_id}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${
-                        project.last_scan_state === 'COMPLETED' ? 'bg-green-500' :
-                        project.last_scan_state === 'FAILED' ? 'bg-red-500' :
-                        project.last_scan_state === 'RUNNING' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
-                      }`} />
-                      <span className="text-sm font-medium text-slate-700">
-                        {project.last_scan_state || 'No scans yet'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <Link
-                      to={`/projects/${project.project_id}`}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
-                    >
-                      <Activity className="w-4 h-4" />
-                      Manage
-                    </Link>
-                  </td>
-                </tr>
+                <ProjectRow key={project.project_id} project={project} />
               ))
             )}
           </tbody>
