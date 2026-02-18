@@ -95,11 +95,9 @@ const ScanStatusPage = () => {
     const fetchData = async () => {
       if (!id || !isMounted) return;
       try {
-        // Performance: Parallelize API calls to reduce total latency per polling tick
-        const [scanData, stageResults] = await Promise.all([
-          api.scans.get(id),
-          api.scans.getResults(id)
-        ]);
+        // Performance: Use the combined scan+results endpoint to reduce network overhead by 50% during polling.
+        const scanData = await api.scans.get(id);
+        const stageResults = scanData?.results;
 
         if (scanData && isMounted) {
           // Performance: Reference-preserving update for scan metadata.
@@ -120,8 +118,8 @@ const ScanStatusPage = () => {
           }
         }
 
-          if (stageResults && isMounted) {
-            setResults(prevResults => {
+        if (stageResults && isMounted) {
+          setResults(prevResults => {
               // Performance: Item-level reference-preserving diffing.
               // Reusing old object references for unchanged stages ensures that React.memo(StageRow)
               // can skip re-rendering individual rows, significantly reducing CPU usage during polling.
@@ -139,9 +137,9 @@ const ScanStatusPage = () => {
                 return newItem;
               });
 
-              if (!changed && prevResults.length === stageResults.length) return prevResults;
-              return nextResults;
-            });
+            if (!changed && prevResults.length === stageResults.length) return prevResults;
+            return nextResults;
+          });
         }
       } catch (err) {
         console.error('Failed to fetch scan data:', err);

@@ -31,8 +31,7 @@ def test_callback_syncs_project_last_scan_state_on_success():
         "/api/v1/scans",
         json={
             "project_id": project_id,
-            "scan_mode": "AUTOMATED",
-            "selected_stages": ["SAST"],
+            "scan_mode": "automated",
         },
     )
     assert scan_response.status_code == 201
@@ -66,8 +65,7 @@ def test_callback_syncs_project_last_scan_state_on_failure():
         "/api/v1/scans",
         json={
             "project_id": project_id,
-            "scan_mode": "AUTOMATED",
-            "selected_stages": ["SAST"],
+            "scan_mode": "automated",
         },
     )
     assert scan_response.status_code == 201
