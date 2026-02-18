@@ -13,6 +13,10 @@
 **Learning:** Sequential `await` calls in polling loops create a cumulative network bottleneck. Parallelizing with `Promise.all` can significantly reduce the "active" time of each poll tick. Furthermore, returning a new array from a state setter (like `setResults`) triggers re-renders for all list children unless object references for individual unchanged items are preserved, even if the child components are wrapped in `React.memo`.
 
 **Action:** Use `Promise.all` for independent API calls in effects. When updating lists in state, map over the new data and keep references to old objects if their properties haven't changed to maximize the effectiveness of `React.memo`.
+
+## 2026-02-18 - Consolidating API Calls for Polling Efficiency
+**Learning:** While parallelizing independent API calls with `Promise.all` is better than sequential calls, the most efficient approach for high-frequency polling is to consolidate related data into a single API response. This reduces network overhead (fewer HTTP handshakes, smaller total header overhead) and simplifies client-side state management.
+**Action:** When a client consistently needs multiple pieces of data together (e.g., scan metadata and scan results), update the backend schema and API to return them in a single response. This cuts the number of polling requests by half.
 ## 2026-02-16 - Reference Stability in Polling
 **Learning:** Returning a new object reference in a React state setter *always* triggers a re-render, even if the data is identical. In polling views, this can lead to massive CPU waste as the entire page and its children re-render every few seconds.
 **Action:** Use reference-preserving diffing in state setters (`setResults(prev => ...)`). Only return a new array/object if data has actually changed, and reuse existing object references for unchanged items in a list to enable `React.memo` to skip child re-renders.

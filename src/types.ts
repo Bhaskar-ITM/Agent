@@ -26,6 +26,7 @@ export type Scan = {
   state: 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED' | 'FAILED' | 'CANCELLED' | 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED';
   started_at?: string;
   finished_at?: string;
+  results?: ScanStage[];
 };
 
 export const FIXED_STAGES = [
