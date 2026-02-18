@@ -28,6 +28,14 @@ const ManualScanPage = () => {
     );
   };
 
+  const toggleAll = () => {
+    if (selectedStages.length === FIXED_STAGES.length) {
+      setSelectedStages([]);
+    } else {
+      setSelectedStages([...FIXED_STAGES]);
+    }
+  };
+
   const handleRun = async () => {
     if (!id || selectedStages.length === 0) return;
     setLoading(true);
@@ -73,8 +81,17 @@ const ManualScanPage = () => {
             <h2 className="text-xl font-bold text-slate-900">Manual Scan Selection</h2>
             <p className="text-slate-500 text-sm mt-1">Select the specific stages you want to execute for this scan.</p>
           </div>
-          <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold border border-blue-100">
-            {selectedStages.length} Stages Selected
+          <div className="flex items-center gap-4">
+            <button
+              onClick={toggleAll}
+              className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none"
+              aria-label={selectedStages.length === FIXED_STAGES.length ? 'Deselect all stages' : 'Select all stages'}
+            >
+              {selectedStages.length === FIXED_STAGES.length ? 'Deselect All' : 'Select All'}
+            </button>
+            <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold border border-blue-100">
+              {selectedStages.length} Stages Selected
+            </div>
           </div>
         </div>
 
