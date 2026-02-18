@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Project } from '../types';
-import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X } from 'lucide-react';
+import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X, Copy, Check } from 'lucide-react';
 
 const ProjectControlPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -10,6 +10,13 @@ const ProjectControlPage = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopy = (text: string, fieldId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldId);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   useEffect(() => {
     if (id) {
@@ -64,12 +71,21 @@ const ProjectControlPage = () => {
             <h2 className="text-2xl font-bold text-slate-900 mb-6">{project.name}</h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-12">
-              <div className="space-y-1">
+              <div className="space-y-1 group">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
                   <Globe className="w-3 h-3" aria-hidden="true" />
                   Repository URL
                 </div>
-                <div className="text-slate-700 font-medium break-all">{project.git_url}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-slate-700 font-medium break-all">{project.git_url}</div>
+                  <button
+                    onClick={() => handleCopy(project.git_url, 'repo')}
+                    className="p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-slate-400 hover:text-blue-600"
+                    aria-label="Copy repository URL"
+                  >
+                    {copiedField === 'repo' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -80,12 +96,21 @@ const ProjectControlPage = () => {
                 <div className="text-slate-700 font-medium">{project.branch}</div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1 group">
                 <div className="flex items-center gap-2 text-slate-400 text-sm font-medium uppercase tracking-wider">
                   <ShieldCheck className="w-3 h-3" aria-hidden="true" />
                   Sonar Key
                 </div>
-                <div className="text-slate-700 font-medium">{project.sonar_key}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-slate-700 font-medium">{project.sonar_key}</div>
+                  <button
+                    onClick={() => handleCopy(project.sonar_key, 'sonar')}
+                    className="p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-slate-400 hover:text-blue-600"
+                    aria-label="Copy sonar project key"
+                  >
+                    {copiedField === 'sonar' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1">
