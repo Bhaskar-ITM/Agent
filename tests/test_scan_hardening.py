@@ -154,7 +154,7 @@ def test_running_scan_times_out_when_window_exceeded():
 
     scan = scans_db[scan_id]
     scan.state = ScanState.RUNNING
-    scan.created_at = scan.created_at - timedelta(hours=3)
+    scan.started_at = scan.created_at - timedelta(hours=3)
 
     status_response = client.get(f"/api/v1/scans/{scan_id}")
     assert status_response.status_code == 200

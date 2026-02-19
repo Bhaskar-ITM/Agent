@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     DEBUG: bool = False
     MOCK_EXECUTION: bool = False
+    CALLBACK_TOKEN: str = ""
 
     model_config = SettingsConfigDict(
         extra="ignore",

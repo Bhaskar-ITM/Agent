@@ -13,11 +13,40 @@ def recordResult(name, status, details = "", reportUrl = "") {
     ]
 }
 
+
+
+def toStageId(stageName) {
+    switch(stageName) {
+        case 'Git Checkout': return 'git_checkout'
+        case 'Sonar Scanner': return 'sonar_scanner'
+        case 'Sonar Quality Gate': return 'sonar_quality_gate'
+        case 'NPM / PIP Install': return 'npm_pip_install'
+        case 'Dependency Check': return 'dependency_check'
+        case 'Trivy FS Scan': return 'trivy_fs_scan'
+        case 'Docker Build': return 'docker_build'
+        case 'Docker Push': return 'docker_push'
+        case 'Trivy Image Scan': return 'trivy_image_scan'
+        case 'Nmap Scan': return 'nmap_scan'
+        case 'ZAP Scan': return 'zap_scan'
+        default: return null
+    }
+}
+
+def normalizeStageStatus(rawStatus) {
+    switch((rawStatus ?: '').toUpperCase()) {
+        case 'PASSED': return 'PASS'
+        case 'FAILED': return 'FAIL'
+        case 'SKIPPED': return 'SKIPPED'
+        case 'WARN': return 'WARN'
+        default: return 'WARN'
+    }
+}
+
 def shouldRun(stageName, mode, manualSelection) {
     if (mode == 'MANUAL') {
         def slurper = new JsonSlurper()
         def selected = slurper.parseText(manualSelection)
-        return selected.contains(stageName)
+        return selected.contains(toStageId(stageName))
     } else {
         // AUTOMATED MODE - Discovery logic
         switch(stageName) {
@@ -316,16 +345,34 @@ pipeline {
     post {
         always {
             script {
+                def normalizedStages = stageResults.collect { stage ->
+                    [
+                        stage: toStageId(stage.name),
+                        status: normalizeStageStatus(stage.status),
+                        summary: stage.details,
+                        artifact_url: stage.reportUrl,
+                        timestamp: stage.timestamp
+                    ]
+                }
+
                 def finalReport = [
                     scanId: params.SCAN_ID,
+                    queue_id: env.BUILD_QUEUE_ID ?: '',
+                    build_number: env.BUILD_NUMBER,
                     status: currentBuild.currentResult,
-                    stages: stageResults,
+                    stages: normalizedStages,
                     finishedAt: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
                 ]
                 def jsonReport = JsonOutput.toJson(finalReport)
+                writeFile file: 'final_report.json', text: jsonReport
                 echo "Final Execution Report: ${jsonReport}"
-                // Reporting back to backend Control Plane (v1)
-                sh "curl -X POST -H 'Content-Type: application/json' -d '${jsonReport}' http://backend:8000/api/v1/scans/${params.SCAN_ID}/callback"
+
+                def callbackTokenHeader = env.CALLBACK_TOKEN ? "-H \"X-Callback-Token: ${env.CALLBACK_TOKEN}\"" : ""
+                sh """
+                  curl -sS -X POST -H 'Content-Type: application/json' ${callbackTokenHeader} \
+                    --data-binary @final_report.json \
+                    http://backend:8000/api/v1/scans/${params.SCAN_ID}/callback
+                """
             }
         }
     }
