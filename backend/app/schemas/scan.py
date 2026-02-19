@@ -8,6 +8,12 @@ class ScanCreate(BaseModel):
     scan_mode: str  # automated | manual
     selected_stages: Optional[List[str]] = None
 
+class StageResult(BaseModel):
+    stage: str
+    status: str
+    summary: Optional[str] = None
+    artifact_url: Optional[str] = None
+
 class ScanResponse(BaseModel):
     scan_id: str
     project_id: str
@@ -17,12 +23,7 @@ class ScanResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
-
-class StageResult(BaseModel):
-    stage: str
-    status: str
-    summary: Optional[str] = None
-    artifact_url: Optional[str] = None
+    results: List[StageResult] = []
 
 class ScanResultsResponse(BaseModel):
     scan_id: str

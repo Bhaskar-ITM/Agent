@@ -192,6 +192,7 @@ def trigger_scan(scan: ScanCreate):
         "created_at": scan_obj.created_at,
         "started_at": scan_obj.started_at,
         "finished_at": scan_obj.finished_at,
+        "results": scan_obj.stage_results
     }
 
 
@@ -210,6 +211,7 @@ def get_scan(scan_id: str):
         "created_at": scan_obj.created_at,
         "started_at": scan_obj.started_at,
         "finished_at": scan_obj.finished_at,
+        "results": scan_obj.stage_results
     }
 
 

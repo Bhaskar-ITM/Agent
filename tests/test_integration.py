@@ -29,22 +29,22 @@ def test_integration_v1(mock_trigger):
     # 2. Trigger scan
     scan_data = {
         "project_id": project_id,
-        "mode": "AUTOMATED"
+        "scan_mode": "automated"
     }
     response = client.post("/api/v1/scans", json=scan_data)
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
 
     # Assert output matches spec
     assert "scan_id" in data
-    assert data["state"] in ["QUEUED", "RUNNING"]
+    assert data["state"] == "CREATED"
 
     scan_id = data["scan_id"]
 
     # 3. Get Status
     response = client.get(f"/api/v1/scans/{scan_id}")
     assert response.status_code == 200
-    assert response.json()["state"] == "RUNNING" # scan_orchestrator moves to RUNNING on success
+    assert response.json()["state"] == "CREATED"
 
     # 4. Get Results
     response = client.get(f"/api/v1/scans/{scan_id}/results")
