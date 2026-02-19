@@ -82,4 +82,33 @@ describe('ManualScanPage', () => {
     fireEvent.click(screen.getByText('ZAP Scan'));
     expect(screen.getByText('Target URL (for ZAP)')).toBeInTheDocument();
   });
+
+  it('toggles all stages when Select All / Deselect All is clicked', async () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/1/manual']}>
+        <Routes>
+          <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Git Checkout');
+
+    // Initially 0 stages selected
+    expect(screen.getByText('0 Stages Selected')).toBeInTheDocument();
+    const toggleBtn = screen.getByRole('button', { name: /select all stages/i });
+    expect(toggleBtn).toHaveTextContent('Select All');
+
+    // Click Select All
+    fireEvent.click(toggleBtn);
+    expect(screen.getByText('11 Stages Selected')).toBeInTheDocument();
+    expect(toggleBtn).toHaveTextContent('Deselect All');
+    expect(toggleBtn).toHaveAttribute('aria-label', 'Deselect all stages');
+
+    // Click Deselect All
+    fireEvent.click(toggleBtn);
+    expect(screen.getByText('0 Stages Selected')).toBeInTheDocument();
+    expect(toggleBtn).toHaveTextContent('Select All');
+    expect(toggleBtn).toHaveAttribute('aria-label', 'Select all stages');
+  });
 });
