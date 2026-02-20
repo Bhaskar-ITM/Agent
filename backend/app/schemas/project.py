@@ -13,3 +13,8 @@ class ProjectCreate(BaseModel):
 class ProjectResponse(ProjectCreate):
     project_id: str
     status: str = "CREATED"
+    project_type: Optional[str] = "unknown"
+    has_dockerfile: bool = False
+    has_frontend: bool = False
+    has_backend: bool = False
+    dependency_type: Optional[str] = None

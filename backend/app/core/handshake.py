@@ -7,12 +7,12 @@ SECURITY_STAGES = {
     1: {"name": "Git Checkout", "requires": []},
     2: {"name": "Sonar Scanner", "requires": []},
     3: {"name": "Sonar Quality Gate", "requires": []},
-    4: {"name": "NPM / PIP Install", "requires": []},
-    5: {"name": "Dependency Check", "requires": []},
+    4: {"name": "NPM / PIP Install", "requires": ["dependency_type"]},
+    5: {"name": "Dependency Check", "requires": ["dependency_type"]},
     6: {"name": "Trivy FS Scan", "requires": []},
-    7: {"name": "Docker Build", "requires": []},
-    8: {"name": "Docker Push", "requires": []},
-    9: {"name": "Trivy Image Scan", "requires": []},
+    7: {"name": "Docker Build", "requires": ["has_dockerfile"]},
+    8: {"name": "Docker Push", "requires": ["has_dockerfile"]},
+    9: {"name": "Trivy Image Scan", "requires": ["has_dockerfile"]},
     10: {"name": "Nmap Scan", "requires": ["target_ip"]},
     11: {"name": "ZAP Scan", "requires": ["target_url"]}
 }

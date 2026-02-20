@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.schemas.project import ProjectCreate, ProjectResponse
+from app.services.discovery_service import discovery_service
 import uuid
 
 router = APIRouter()
@@ -22,8 +23,16 @@ def list_projects():
 def create_project(project: ProjectCreate):
     project_id = str(uuid.uuid4())
     project_data = project.model_dump()
-    project_data["project_id"] = project_id
-    project_data["status"] = "CREATED"
+
+    # Step 2 & 3: Perform Repository Inspection & Store Metadata
+    metadata = discovery_service.inspect_repository(project.git_url, project.branch)
+
+    project_data.update({
+        "project_id": project_id,
+        "status": "CREATED",
+        **metadata
+    })
+
     projects_db[project_id] = project_data
     return project_data
 
