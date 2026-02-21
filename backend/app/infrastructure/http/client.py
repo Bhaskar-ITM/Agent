@@ -8,6 +8,8 @@ class HttpClient:
     def __init__(self, base_url: str, default_headers: Optional[Dict[str, str]] = None):
         self.base_url = base_url.rstrip("/")
         self.default_headers = default_headers or {}
+        # Bolt: Use requests.Session for connection pooling to reduce TCP/TLS handshake overhead
+        self.session = requests.Session()
 
     def request(
         self,
@@ -22,7 +24,8 @@ class HttpClient:
         merged_headers = {**self.default_headers, **(headers or {})}
 
         try:
-            response = requests.request(
+            # Bolt: Utilize the shared session for the request to benefit from connection pooling
+            response = self.session.request(
                 method=method,
                 url=url,
                 json=data,

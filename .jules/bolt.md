@@ -28,3 +28,7 @@
 ## 2026-02-17 - Search Debouncing and Memoized Filtering
 **Learning:** Filtering large lists on every keystroke causes cumulative UI lag as the number of items grows. Debouncing the search term by 300ms significantly reduces CPU usage and re-renders during user input. Combining this with `useMemo` for the filtered list and `React.memo` for individual list items ensures that typing only causes a single "heavy" render after the user stops, and that unchanged items don't re-render unnecessarily.
 **Action:** Implement a generic `useDebounce` hook for all search inputs. Always wrap search-based list filtering in `useMemo` and use `React.memo` for list items to maintain UI responsiveness.
+
+## 2026-03-20 - Connection Pooling Persistence
+**Learning:** Even if memory or documentation claims a performance optimization like connection pooling is implemented, always verify the source code. Infrastructure components like `HttpClient` can easily regress or be partially implemented without `requests.Session`.
+**Action:** Always inspect the core `HttpClient` or equivalent in new codebases to ensure `requests.Session` is correctly utilized for all outbound traffic.
