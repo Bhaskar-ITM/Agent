@@ -7,7 +7,10 @@ from app.core.config import settings
 class HttpClient:
     def __init__(self, base_url: str, default_headers: Optional[Dict[str, str]] = None):
         self.base_url = base_url.rstrip("/")
-        self.default_headers = default_headers or {}
+        # Performance: Use requests.Session for connection pooling to reduce TCP/TLS handshake overhead.
+        self.session = requests.Session()
+        if default_headers:
+            self.session.headers.update(default_headers)
 
     def request(
         self,
@@ -19,15 +22,15 @@ class HttpClient:
         timeout: int = 30,
     ):
         url = f"{self.base_url}/{path.lstrip('/')}"
-        merged_headers = {**self.default_headers, **(headers or {})}
 
         try:
-            response = requests.request(
+            # Performance: Reusing the session enables connection pooling for successive requests to the same host.
+            response = self.session.request(
                 method=method,
                 url=url,
                 json=data,
                 params=params,
-                headers=merged_headers,
+                headers=headers,
                 timeout=timeout,
             )
 
