@@ -153,14 +153,15 @@ def trigger_scan(scan: ScanCreate):
         raise HTTPException(status_code=404, detail="Project not found")
 
     with scans_db_lock:
-        for existing_scan in scans_db.values():
-            if existing_scan.project_id == scan.project_id and existing_scan.state in ACTIVE_STATES:
-                raise HTTPException(
-                    status_code=409,
-                    detail="An active scan already exists for this project",
-                )
-
         project = projects_db[scan.project_id]
+
+        # Performance Optimization (Bolt ⚡): O(1) lookup of active scan state via project metadata.
+        # Previously, this was an O(N) linear search over the entire scans_db, which degraded as history grew.
+        if project.get("last_scan_state") in ACTIVE_STATES:
+            raise HTTPException(
+                status_code=409,
+                detail="An active scan already exists for this project",
+            )
         scan_obj = create_scan_object(
             project_id=scan.project_id,
             scan_mode=scan.scan_mode,

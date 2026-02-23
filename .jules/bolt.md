@@ -28,3 +28,7 @@
 ## 2026-02-17 - Search Debouncing and Memoized Filtering
 **Learning:** Filtering large lists on every keystroke causes cumulative UI lag as the number of items grows. Debouncing the search term by 300ms significantly reduces CPU usage and re-renders during user input. Combining this with `useMemo` for the filtered list and `React.memo` for individual list items ensures that typing only causes a single "heavy" render after the user stops, and that unchanged items don't re-render unnecessarily.
 **Action:** Implement a generic `useDebounce` hook for all search inputs. Always wrap search-based list filtering in `useMemo` and use `React.memo` for list items to maintain UI responsiveness.
+
+## 2026-02-20 - O(1) Active Scan Lookup
+**Learning:** Linear searches (O(N)) over in-memory datasets (like `scans_db.values()`) might seem fast initially but become significant bottlenecks as the system's history grows. Leveraging existing metadata in related objects (like `projects_db`) allows for O(1) lookups that remain constant regardless of the total number of records.
+**Action:** Always prefer indexed lookups or metadata-driven checks over full collection iterations when enforcing constraints or state-based logic.
