@@ -1,6 +1,6 @@
-## 2025-05-15 - [Accessibility of custom checkboxes]
-**Learning:** Using `display: none` (Tailwind `hidden`) on an input removes it from the document's tab order, making it inaccessible to keyboard users. Using `sr-only` (screen-reader only) keeps the input in the tab order while hiding it visually.
-**Action:** Always use `sr-only` instead of `hidden` for inputs that are visually replaced by custom UI. Add `focus-within` styles to the parent container to provide a visible focus indicator for these inputs.
+## 2025-05-15 - Playwright Strict Mode & Label Targeting
+**Learning:** When using Playwright's `get_by_label`, it may resolve to multiple elements if interactive elements (like a password toggle button) are nested near or associated with the label. Using specific ID selectors or `page.locator("label[for='...']")` is more robust.
+**Action:** Use specific ID selectors for form inputs in Playwright scripts when interactive decorators are present.
 
 ## 2025-05-16 - [Standard Accessible Modal Pattern]
 **Learning:** Modals require more than just a center-aligned `div`. They must have `role="dialog"`, `aria-modal="true"`, and descriptive labels via `aria-labelledby`/`aria-describedby`. Critical interactions include closing via Backdrop click, Escape key, and an explicit close button.
