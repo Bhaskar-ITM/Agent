@@ -61,7 +61,9 @@ const ManualScanPage = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <button
+        type="button"
         onClick={() => navigate(`/projects/${id}`)}
+        aria-label="Back to project control"
         className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
       >
         <ChevronLeft className="w-4 h-4" aria-hidden="true" />
@@ -83,6 +85,7 @@ const ManualScanPage = () => {
           </div>
           <div className="flex items-center gap-4">
             <button
+              type="button"
               onClick={toggleAll}
               className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none"
               aria-label={selectedStages.length === FIXED_STAGES.length ? 'Deselect all stages' : 'Select all stages'}
@@ -167,6 +170,7 @@ const ManualScanPage = () => {
 
           <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
             <button
+              type="button"
               onClick={() => navigate(`/projects/${id}`)}
               className="px-6 py-3 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl transition-colors"
             >
