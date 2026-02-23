@@ -41,6 +41,8 @@ const ProjectRow = memo(({ project }: { project: Project }) => (
 
 ProjectRow.displayName = 'ProjectRow';
 
+const ACTIVE_STATES = new Set(['CREATED', 'QUEUED', 'RUNNING']);
+
 const DashboardPage = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,6 +53,11 @@ const DashboardPage = () => {
 
   // Performance: Memoize filtered projects to avoid re-calculating on every render.
   // We use debouncedSearchTerm to significantly reduce CPU usage during typing.
+  const hasActiveScan = useMemo(
+    () => projects.some((p) => ACTIVE_STATES.has(p.last_scan_state ?? '')),
+    [projects]
+  );
+
   const filteredProjects = useMemo(() => {
     if (!debouncedSearchTerm) return projects;
 
@@ -102,6 +109,12 @@ const DashboardPage = () => {
           New Project
         </Link>
       </div>
+
+      {hasActiveScan && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm">
+          A scan is currently active. New scan triggers are temporarily blocked until completion.
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <table className="w-full text-left">

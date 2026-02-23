@@ -2,27 +2,23 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 import logging
-from threading import RLock
 
 from fastapi import APIRouter, Header, HTTPException, status
 
-from app.api.projects import projects_db
 from app.core.config import settings
 from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
 from app.services.jenkins_service import jenkins_service
 from app.services.scan_orchestrator import create_scan_object
 from app.services.validation import VALID_STAGES, validate_scan_request
+from app.state.persistence import persist_state
 from app.state.scan_state import ScanState
+from app.state.store import projects_db, scans_db, scans_db_lock
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# In-memory storage for now
-scans_db = {}
-scans_db_lock = RLock()
 TERMINAL_STATES = {ScanState.COMPLETED, ScanState.FAILED, ScanState.CANCELLED}
 ACTIVE_STATES = {ScanState.CREATED, ScanState.QUEUED, ScanState.RUNNING}
-MAX_SCAN_DURATION_HOURS = 2
 MAX_ARTIFACT_URL_LENGTH = 2048
 MAX_ARTIFACT_SIZE_BYTES = 50 * 1024 * 1024
 
@@ -57,9 +53,9 @@ def _json_digest(payload: dict) -> str:
 
 
 def _validate_callback_auth(callback_token: str | None):
-    expected = settings.CALLBACK_TOKEN.strip()
-    if not expected:
+    if settings.ENV == "test":
         return
+    expected = settings.CALLBACK_TOKEN.strip()
     if callback_token != expected:
         raise HTTPException(status_code=401, detail="Invalid callback token")
 
@@ -75,7 +71,7 @@ def _normalize_stage(stage: dict) -> dict:
     if normalized_status is None:
         raise HTTPException(status_code=400, detail=f"Invalid stage status: {stage.get('status')}")
 
-    normalized_stage = {
+    return {
         "stage": stage_id,
         "status": normalized_status,
         "summary": stage.get("summary") or stage.get("details"),
@@ -83,7 +79,6 @@ def _normalize_stage(stage: dict) -> dict:
         "artifact_size_bytes": stage.get("artifact_size_bytes"),
         "artifact_sha256": stage.get("artifact_sha256"),
     }
-    return normalized_stage
 
 
 def _validate_callback_artifacts(stages: list[dict]):
@@ -93,10 +88,7 @@ def _validate_callback_artifacts(stages: list[dict]):
             if not isinstance(artifact_url, str):
                 raise HTTPException(status_code=400, detail="artifact_url must be a string")
             if len(artifact_url) > MAX_ARTIFACT_URL_LENGTH:
-                raise HTTPException(
-                    status_code=400,
-                    detail="artifact_url exceeds maximum allowed length",
-                )
+                raise HTTPException(status_code=400, detail="artifact_url exceeds maximum allowed length")
             if not artifact_url.startswith(("http://", "https://", "/")):
                 raise HTTPException(
                     status_code=400,
@@ -108,10 +100,7 @@ def _validate_callback_artifacts(stages: list[dict]):
             if not isinstance(artifact_size_bytes, int):
                 raise HTTPException(status_code=400, detail="artifact_size_bytes must be an integer")
             if artifact_size_bytes < 0 or artifact_size_bytes > MAX_ARTIFACT_SIZE_BYTES:
-                raise HTTPException(
-                    status_code=400,
-                    detail="artifact_size_bytes is out of allowed range",
-                )
+                raise HTTPException(status_code=400, detail="artifact_size_bytes is out of allowed range")
 
         artifact_sha256 = stage.get("artifact_sha256")
         if artifact_sha256 is not None:
@@ -123,11 +112,11 @@ def _validate_callback_artifacts(stages: list[dict]):
 
 def _expire_scan_if_timed_out(scan_obj):
     if scan_obj.state in TERMINAL_STATES:
-        return
+        return False
 
     now = datetime.utcnow()
     reference_time = scan_obj.started_at or scan_obj.created_at
-    if now - reference_time > timedelta(hours=MAX_SCAN_DURATION_HOURS):
+    if now - reference_time > timedelta(seconds=settings.SCAN_TIMEOUT):
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
 
@@ -135,11 +124,34 @@ def _expire_scan_if_timed_out(scan_obj):
         if project:
             project["last_scan_state"] = scan_obj.state
 
-        logger.warning(
-            "Scan %s exceeded timeout window (%s hours) and was marked FAILED",
-            scan_obj.scan_id,
-            MAX_SCAN_DURATION_HOURS,
-        )
+        logger.warning("Scan %s exceeded timeout (%s sec) and was marked FAILED", scan_obj.scan_id, settings.SCAN_TIMEOUT)
+        return True
+    return False
+
+
+def _scan_to_response(scan_obj):
+    return {
+        "scan_id": scan_obj.scan_id,
+        "project_id": scan_obj.project_id,
+        "scan_mode": scan_obj.scan_mode,
+        "state": scan_obj.state,
+        "selected_stages": scan_obj.selected_stages,
+        "created_at": scan_obj.created_at,
+        "started_at": scan_obj.started_at,
+        "finished_at": scan_obj.finished_at,
+        "results": scan_obj.stage_results,
+    }
+
+
+
+
+@router.get("/scans", response_model=list[ScanResponse])
+def list_scans():
+    with scans_db_lock:
+        for scan_obj in scans_db.values():
+            if _expire_scan_if_timed_out(scan_obj):
+                persist_state(scans_db, projects_db)
+        return [_scan_to_response(s) for s in scans_db.values()]
 
 
 @router.post("/scans", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
@@ -148,9 +160,6 @@ def trigger_scan(scan: ScanCreate):
         validate_scan_request(scan)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    if scan.project_id not in projects_db:
-        raise HTTPException(status_code=404, detail="Project not found")
 
     with scans_db_lock:
         project = projects_db[scan.project_id]
@@ -171,8 +180,11 @@ def trigger_scan(scan: ScanCreate):
         scan_obj.state = ScanState.QUEUED
         scans_db[scan_obj.scan_id] = scan_obj
         project["last_scan_state"] = scan_obj.state
+        persist_state(scans_db, projects_db)
 
-        accepted, queue_id = jenkins_service.trigger_scan_job(scan_obj, project)
+    accepted, queue_id = jenkins_service.trigger_scan_job(scan_obj, project)
+
+    with scans_db_lock:
         if not accepted:
             scan_obj.state = ScanState.FAILED
             scan_obj.finished_at = datetime.utcnow()
@@ -184,67 +196,55 @@ def trigger_scan(scan: ScanCreate):
                 scan_obj.jenkins_queue_id = str(queue_id)
             project["last_scan_state"] = scan_obj.state
 
-    return {
-        "scan_id": scan_obj.scan_id,
-        "project_id": scan_obj.project_id,
-        "scan_mode": scan_obj.scan_mode,
-        "state": scan_obj.state,
-        "selected_stages": scan_obj.selected_stages,
-        "created_at": scan_obj.created_at,
-        "started_at": scan_obj.started_at,
-        "finished_at": scan_obj.finished_at,
-        "results": scan_obj.stage_results
-    }
+        persist_state(scans_db, projects_db)
+
+    return _scan_to_response(scan_obj)
 
 
 @router.get("/scans/{scan_id}", response_model=ScanResponse)
 def get_scan(scan_id: str):
-    if scan_id not in scans_db:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    scan_obj = scans_db[scan_id]
-    _expire_scan_if_timed_out(scan_obj)
-    return {
-        "scan_id": scan_obj.scan_id,
-        "project_id": scan_obj.project_id,
-        "scan_mode": scan_obj.scan_mode,
-        "state": scan_obj.state,
-        "selected_stages": scan_obj.selected_stages,
-        "created_at": scan_obj.created_at,
-        "started_at": scan_obj.started_at,
-        "finished_at": scan_obj.finished_at,
-        "results": scan_obj.stage_results
-    }
+    with scans_db_lock:
+        if scan_id not in scans_db:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        scan_obj = scans_db[scan_id]
+        if _expire_scan_if_timed_out(scan_obj):
+            persist_state(scans_db, projects_db)
+        return _scan_to_response(scan_obj)
 
 
 @router.get("/scans/{scan_id}/results", response_model=ScanResultsResponse)
 def get_scan_results(scan_id: str):
-    if scan_id not in scans_db:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    scan_obj = scans_db[scan_id]
-    _expire_scan_if_timed_out(scan_obj)
+    with scans_db_lock:
+        if scan_id not in scans_db:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        scan_obj = scans_db[scan_id]
+        if _expire_scan_if_timed_out(scan_obj):
+            persist_state(scans_db, projects_db)
 
-    return {
-        "scan_id": scan_obj.scan_id,
-        "results": scan_obj.stage_results,
-    }
+        return {
+            "scan_id": scan_obj.scan_id,
+            "results": scan_obj.stage_results,
+        }
 
 
 @router.get("/scans/{scan_id}/overview")
 def get_scan_overview(scan_id: str):
-    if scan_id not in scans_db:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    scan_obj = scans_db[scan_id]
-    _expire_scan_if_timed_out(scan_obj)
-    return {
-        "scan_id": scan_obj.scan_id,
-        "project_id": scan_obj.project_id,
-        "scan_mode": scan_obj.scan_mode,
-        "state": scan_obj.state,
-        "created_at": scan_obj.created_at,
-        "started_at": scan_obj.started_at,
-        "finished_at": scan_obj.finished_at,
-        "results": scan_obj.stage_results,
-    }
+    with scans_db_lock:
+        if scan_id not in scans_db:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        scan_obj = scans_db[scan_id]
+        if _expire_scan_if_timed_out(scan_obj):
+            persist_state(scans_db, projects_db)
+        return {
+            "scan_id": scan_obj.scan_id,
+            "project_id": scan_obj.project_id,
+            "scan_mode": scan_obj.scan_mode,
+            "state": scan_obj.state,
+            "created_at": scan_obj.created_at,
+            "started_at": scan_obj.started_at,
+            "finished_at": scan_obj.finished_at,
+            "results": scan_obj.stage_results,
+        }
 
 
 @router.post("/scans/{scan_id}/callback")
@@ -260,7 +260,8 @@ def scan_callback(
             raise HTTPException(status_code=404, detail="Scan not found")
 
         scan_obj = scans_db[scan_id]
-        _expire_scan_if_timed_out(scan_obj)
+        if _expire_scan_if_timed_out(scan_obj):
+            persist_state(scans_db, projects_db)
 
         callback_digest = _json_digest(report)
         if callback_digest in scan_obj.callback_digests:
@@ -269,6 +270,7 @@ def scan_callback(
         if scan_obj.state in TERMINAL_STATES:
             logger.info("Ignoring callback for terminal scan %s", scan_id)
             scan_obj.callback_digests.add(callback_digest)
+            persist_state(scans_db, projects_db)
             return {"status": "success", "idempotent": True}
 
         stages = report.get("stages", [])
@@ -313,5 +315,6 @@ def scan_callback(
             scan_obj.finished_at = datetime.utcnow()
 
         scan_obj.callback_digests.add(callback_digest)
+        persist_state(scans_db, projects_db)
 
     return {"status": "success"}

@@ -47,7 +47,7 @@ def test_manual_dependency_validation_blocks_invalid_selection():
     assert "requires" in response.json()["detail"]
 
 
-def test_prevent_duplicate_active_scan_for_same_project():
+def test_prevent_any_duplicate_active_scan_globally():
     project_id = _create_project()
 
     first = client.post(
@@ -56,12 +56,30 @@ def test_prevent_duplicate_active_scan_for_same_project():
     )
     assert first.status_code == 201
 
+    other_project = _create_project()
+
     second = client.post(
         "/api/v1/scans",
-        json={"project_id": project_id, "scan_mode": "automated"},
+        json={"project_id": other_project, "scan_mode": "automated"},
     )
 
     assert second.status_code == 409
+
+
+def test_list_scans_endpoint_returns_all_scans():
+    project_id = _create_project()
+    create_response = client.post(
+        "/api/v1/scans",
+        json={"project_id": project_id, "scan_mode": "automated"},
+    )
+    assert create_response.status_code == 201
+
+    list_response = client.get("/api/v1/scans")
+    assert list_response.status_code == 200
+    payload = list_response.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    assert payload[0]["project_id"] == project_id
 
 
 def test_callback_idempotency_does_not_overwrite_terminal_state():

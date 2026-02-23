@@ -10,6 +10,8 @@ const ProjectControlPage = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [hasActiveScan, setHasActiveScan] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const handleCopy = (text: string, fieldId: string) => {
@@ -21,7 +23,11 @@ const ProjectControlPage = () => {
   useEffect(() => {
     if (id) {
       api.projects.get(id).then(data => {
-        if (data) setProject(data);
+        if (data) {
+          setProject(data);
+          const ACTIVE = new Set(['CREATED', 'QUEUED', 'RUNNING']);
+          setHasActiveScan(ACTIVE.has(data.last_scan_state ?? ''));
+        }
         setLoading(false);
       });
     }
@@ -41,11 +47,19 @@ const ProjectControlPage = () => {
     if (!id) return;
     setLoading(true);
     try {
+      setError(null);
       const scan = await api.scans.trigger(id, 'automated');
       navigate(`/scans/${scan.scan_id}`);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        setError('A scan is already running. Please wait for it to complete.');
+      } else if (err?.response?.status === 401) {
+        setError('Unauthorized. Verify API key configuration.');
+      } else {
+        setError(err?.response?.data?.detail || 'Failed to trigger scan');
+      }
       setLoading(false);
+      setShowConfirm(false);
     }
   };
 
@@ -65,6 +79,10 @@ const ProjectControlPage = () => {
           Back to Dashboard
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Project Details Card */}
@@ -143,10 +161,11 @@ const ProjectControlPage = () => {
             <p className="text-blue-100 text-sm mb-6">Let the system decide which security stages to run based on project configuration.</p>
             <button
               onClick={() => setShowConfirm(true)}
-              className="w-full bg-white text-blue-600 hover:bg-blue-50 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+              disabled={hasActiveScan || loading}
+              className="w-full bg-white text-blue-600 hover:bg-blue-50 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Play className="w-4 h-4 fill-current" aria-hidden="true" />
-              Run Now
+              {hasActiveScan ? 'Scan in Progress...' : 'Run Now'}
             </button>
           </div>
 
@@ -203,7 +222,8 @@ const ProjectControlPage = () => {
               <button
                 type="button"
                 onClick={handleRunAutomated}
-                className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg shadow-blue-200"
+                disabled={hasActiveScan || loading}
+                className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Confirm & Run
               </button>

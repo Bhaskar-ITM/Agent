@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     DEBUG: bool = False
     MOCK_EXECUTION: bool = False
-    CALLBACK_TOKEN: str = ""
+    CALLBACK_TOKEN: str
+    API_KEY: str
 
     model_config = SettingsConfigDict(
         extra="ignore",
@@ -32,6 +33,12 @@ class Settings(BaseSettings):
 
         if self.ENV == "test" and not self.MOCK_EXECUTION:
             raise ValueError("MOCK_EXECUTION must be true in test environment")
+
+        if self.ENV != "test":
+            if not self.CALLBACK_TOKEN or len(self.CALLBACK_TOKEN.strip()) < 32:
+                raise ValueError("CALLBACK_TOKEN must be set and at least 32 characters")
+            if not self.API_KEY or len(self.API_KEY.strip()) < 32:
+                raise ValueError("API_KEY must be set and at least 32 characters")
 
         return self
 
