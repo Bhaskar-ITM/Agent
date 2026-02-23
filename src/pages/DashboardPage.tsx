@@ -92,6 +92,7 @@ const DashboardPage = () => {
           />
           {searchTerm && (
             <button
+              type="button"
               onClick={() => setSearchTerm('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors"
               aria-label="Clear search"

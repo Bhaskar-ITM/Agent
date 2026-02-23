@@ -70,7 +70,9 @@ const ProjectControlPage = () => {
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <button
+          type="button"
           onClick={() => navigate('/dashboard')}
+          aria-label="Back to dashboard"
           className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" aria-hidden="true" />
@@ -97,6 +99,7 @@ const ProjectControlPage = () => {
                 <div className="flex items-center gap-2">
                   <div className="text-slate-700 font-medium break-all">{project.git_url}</div>
                   <button
+                    type="button"
                     onClick={() => handleCopy(project.git_url, 'repo')}
                     className="p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-slate-400 hover:text-blue-600"
                     aria-label="Copy repository URL"
@@ -122,6 +125,7 @@ const ProjectControlPage = () => {
                 <div className="flex items-center gap-2">
                   <div className="text-slate-700 font-medium">{project.sonar_key}</div>
                   <button
+                    type="button"
                     onClick={() => handleCopy(project.sonar_key, 'sonar')}
                     className="p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-slate-400 hover:text-blue-600"
                     aria-label="Copy sonar project key"
@@ -209,12 +213,14 @@ const ProjectControlPage = () => {
             </p>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => setShowConfirm(false)}
                 className="flex-1 py-3 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-semibold"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleRunAutomated}
                 disabled={hasActiveScan || loading}
                 className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
