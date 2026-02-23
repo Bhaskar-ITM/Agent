@@ -35,7 +35,9 @@ const CreateProjectPage = () => {
   return (
     <div className="max-w-3xl mx-auto">
       <button
+        type="button"
         onClick={() => navigate('/dashboard')}
+        aria-label="Back to dashboard"
         className="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-6 transition-colors"
       >
         <ChevronLeft className="w-4 h-4" />
@@ -52,7 +54,9 @@ const CreateProjectPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Project Name */}
             <div className="col-span-2">
-              <label htmlFor="project-name" className="block text-sm font-semibold text-slate-700 mb-2">Project Name</label>
+              <label htmlFor="project-name" className="block text-sm font-semibold text-slate-700 mb-2">
+                Project Name <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+              </label>
               <div className="relative">
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -69,7 +73,9 @@ const CreateProjectPage = () => {
 
             {/* Git URL */}
             <div className="col-span-2">
-              <label htmlFor="git-url" className="block text-sm font-semibold text-slate-700 mb-2">Git Repository URL</label>
+              <label htmlFor="git-url" className="block text-sm font-semibold text-slate-700 mb-2">
+                Git Repository URL <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+              </label>
               <div className="relative">
                 <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -86,7 +92,9 @@ const CreateProjectPage = () => {
 
             {/* Branch */}
             <div>
-              <label htmlFor="branch" className="block text-sm font-semibold text-slate-700 mb-2">Branch</label>
+              <label htmlFor="branch" className="block text-sm font-semibold text-slate-700 mb-2">
+                Branch <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+              </label>
               <div className="relative">
                 <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -103,7 +111,9 @@ const CreateProjectPage = () => {
 
             {/* Credentials */}
             <div>
-              <label htmlFor="credentials" className="block text-sm font-semibold text-slate-700 mb-2">Git Credentials (ID)</label>
+              <label htmlFor="credentials" className="block text-sm font-semibold text-slate-700 mb-2">
+                Git Credentials (ID) <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+              </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -120,7 +130,9 @@ const CreateProjectPage = () => {
 
             {/* Sonar Key */}
             <div className="col-span-2">
-              <label htmlFor="sonar-key" className="block text-sm font-semibold text-slate-700 mb-2">Sonar Project Key</label>
+              <label htmlFor="sonar-key" className="block text-sm font-semibold text-slate-700 mb-2">
+                Sonar Project Key <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+              </label>
               <div className="relative">
                 <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input

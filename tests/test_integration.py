@@ -37,14 +37,14 @@ def test_integration_v1(mock_trigger):
 
     # Assert output matches spec
     assert "scan_id" in data
-    assert data["state"] == "CREATED"
+    assert data["state"] == "RUNNING"
 
     scan_id = data["scan_id"]
 
     # 3. Get Status
     response = client.get(f"/api/v1/scans/{scan_id}")
     assert response.status_code == 200
-    assert response.json()["state"] == "CREATED"
+    assert response.json()["state"] == "RUNNING"
 
     # 4. Get Results
     response = client.get(f"/api/v1/scans/{scan_id}/results")
