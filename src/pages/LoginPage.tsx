@@ -24,7 +24,9 @@ const LoginPage = () => {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
+              Email <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+            </label>
             <input
               id="email"
               type="email"
