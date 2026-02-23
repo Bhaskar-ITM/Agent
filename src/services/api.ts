@@ -2,11 +2,13 @@ import axios from 'axios';
 import type { Project, Scan, ScanStage, ScanMode } from '../types';
 
 const API_BASE_URL = '/api/v1';
+const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
   },
 });
 
@@ -32,6 +34,10 @@ export const api = {
     }
   },
   scans: {
+    list: async (): Promise<Scan[]> => {
+      const response = await apiClient.get('/scans');
+      return response.data;
+    },
     get: async (id: string): Promise<Scan | undefined> => {
       const response = await apiClient.get(`/scans/${id}`);
       return response.data;

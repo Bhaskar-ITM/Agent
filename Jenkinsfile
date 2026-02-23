@@ -81,7 +81,8 @@ pipeline {
     }
 
     options {
-        timeout(time: 1, unit: 'HOURS')
+        disableConcurrentBuilds()
+        timeout(time: 4, unit: 'HOURS')
         timestamps()
     }
 
@@ -91,6 +92,30 @@ pipeline {
     }
 
     stages {
+        stage('Validate Backend Origin') {
+            steps {
+                script {
+                    if (!params.SCAN_ID?.trim()) {
+                        error('SCAN_ID is required. Direct triggers are not permitted.')
+                    }
+                    if (!env.BACKEND_API_KEY?.trim()) {
+                        error('BACKEND_API_KEY is required for backend-origin validation.')
+                    }
+                    def response = sh(
+                        script: '''
+                            curl -sf -o /dev/null -w "%{http_code}" \
+                              -H "X-API-Key: ${BACKEND_API_KEY}" \
+                              "http://backend:8000/api/v1/scans/${SCAN_ID}" || true
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    if (response != '200') {
+                        error("Backend validation failed for SCAN_ID ${params.SCAN_ID} (HTTP ${response}).")
+                    }
+                }
+            }
+        }
+
         stage('Git Checkout') {
             steps {
                 script {

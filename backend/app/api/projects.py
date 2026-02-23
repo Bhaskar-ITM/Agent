@@ -1,22 +1,25 @@
-from fastapi import APIRouter, HTTPException
-from app.schemas.project import ProjectCreate, ProjectResponse
 import uuid
+
+from fastapi import APIRouter, HTTPException
+
+from app.schemas.project import ProjectCreate, ProjectResponse
+from app.state.persistence import persist_state
+from app.state.store import projects_db, scans_db
 
 router = APIRouter()
 
-# In-memory storage for now
-projects_db = {}
 
 @router.get("/projects", response_model=list[dict])
 def list_projects():
-    # Return mapping for dashboard: [{project_id, name, last_scan_state}]
     return [
         {
             "project_id": p["project_id"],
             "name": p["name"],
-            "last_scan_state": p.get("last_scan_state", "NONE")
-        } for p in projects_db.values()
+            "last_scan_state": p.get("last_scan_state", "NONE"),
+        }
+        for p in projects_db.values()
     ]
+
 
 @router.post("/projects", response_model=ProjectResponse)
 def create_project(project: ProjectCreate):
@@ -25,7 +28,9 @@ def create_project(project: ProjectCreate):
     project_data["project_id"] = project_id
     project_data["status"] = "CREATED"
     projects_db[project_id] = project_data
+    persist_state(scans_db, projects_db)
     return project_data
+
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: str):

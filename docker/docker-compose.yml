@@ -7,6 +7,7 @@ services:
       dockerfile: docker/backend.Dockerfile
     environment:
       PYTHONPATH: /app/backend
+      WEB_CONCURRENCY: 1
     depends_on:
       postgres:
         condition: service_healthy
