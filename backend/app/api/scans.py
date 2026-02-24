@@ -110,13 +110,12 @@ def _validate_callback_artifacts(stages: list[dict]):
                 raise HTTPException(status_code=400, detail="artifact_sha256 must be hexadecimal")
 
 
-def _expire_scan_if_timed_out(scan_obj):
+def _expire_scan_if_timed_out(scan_obj, now: datetime, timeout_seconds: int):
     if scan_obj.state in TERMINAL_STATES:
         return False
 
-    now = datetime.utcnow()
     reference_time = scan_obj.started_at or scan_obj.created_at
-    if now - reference_time > timedelta(seconds=settings.SCAN_TIMEOUT):
+    if (now - reference_time).total_seconds() > timeout_seconds:
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
 
@@ -147,10 +146,15 @@ def _scan_to_response(scan_obj):
 
 @router.get("/scans", response_model=list[ScanResponse])
 def list_scans():
+    now = datetime.utcnow()
+    timeout = settings.SCAN_TIMEOUT
     with scans_db_lock:
+        mutated = False
         for scan_obj in scans_db.values():
-            if _expire_scan_if_timed_out(scan_obj):
-                persist_state(scans_db, projects_db)
+            if _expire_scan_if_timed_out(scan_obj, now, timeout):
+                mutated = True
+        if mutated:
+            persist_state(scans_db, projects_db)
         return [_scan_to_response(s) for s in scans_db.values()]
 
 
@@ -207,7 +211,7 @@ def get_scan(scan_id: str):
         if scan_id not in scans_db:
             raise HTTPException(status_code=404, detail="Scan not found")
         scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
+        if _expire_scan_if_timed_out(scan_obj, datetime.utcnow(), settings.SCAN_TIMEOUT):
             persist_state(scans_db, projects_db)
         return _scan_to_response(scan_obj)
 
@@ -218,7 +222,7 @@ def get_scan_results(scan_id: str):
         if scan_id not in scans_db:
             raise HTTPException(status_code=404, detail="Scan not found")
         scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
+        if _expire_scan_if_timed_out(scan_obj, datetime.utcnow(), settings.SCAN_TIMEOUT):
             persist_state(scans_db, projects_db)
 
         return {
@@ -233,7 +237,7 @@ def get_scan_overview(scan_id: str):
         if scan_id not in scans_db:
             raise HTTPException(status_code=404, detail="Scan not found")
         scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
+        if _expire_scan_if_timed_out(scan_obj, datetime.utcnow(), settings.SCAN_TIMEOUT):
             persist_state(scans_db, projects_db)
         return {
             "scan_id": scan_obj.scan_id,
@@ -260,7 +264,7 @@ def scan_callback(
             raise HTTPException(status_code=404, detail="Scan not found")
 
         scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
+        if _expire_scan_if_timed_out(scan_obj, datetime.utcnow(), settings.SCAN_TIMEOUT):
             persist_state(scans_db, projects_db)
 
         callback_digest = _json_digest(report)

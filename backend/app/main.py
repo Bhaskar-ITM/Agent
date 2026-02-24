@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import os
 import threading
@@ -25,10 +26,12 @@ def _expiry_worker():
     while True:
         time.sleep(60)
         try:
+            now = datetime.utcnow()
+            timeout = settings.SCAN_TIMEOUT
             with scans_db_lock:
                 mutated = False
                 for scan_obj in list(scans_db.values()):
-                    if scans._expire_scan_if_timed_out(scan_obj):
+                    if scans._expire_scan_if_timed_out(scan_obj, now, timeout):
                         mutated = True
                 if mutated:
                     persist_state(scans_db, projects_db)

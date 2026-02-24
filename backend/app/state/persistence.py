@@ -45,7 +45,8 @@ def persist_state(scans_db: dict, projects_db: dict) -> None:
 
         try:
             state_file.parent.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(json.dumps(payload))
+            with tmp.open("w") as f:
+                json.dump(payload, f)
             tmp.replace(state_file)
         except Exception:
             logger.exception("Failed to persist control-plane state")
