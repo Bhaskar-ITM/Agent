@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Scan, Project, ScanStage } from '../types';
@@ -88,6 +88,14 @@ const ScanStatusPage = () => {
   const [results, setResults] = useState<ScanStage[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const progressPercent = useMemo(() => {
+    if (results.length === 0) return 0;
+    const completed = results.filter(r =>
+      ['PASS', 'FAIL', 'WARN', 'SKIPPED', 'COMPLETED', 'FAILED'].includes(r.status.toUpperCase())
+    ).length;
+    return Math.round((completed / results.length) * 100);
+  }, [results]);
 
   useEffect(() => {
     let isMounted = true;
@@ -204,6 +212,26 @@ const ScanStatusPage = () => {
             </div>
           </div>
         </div>
+
+        {results.length > 0 && (
+          <div className="px-8 py-4 bg-slate-50 border-b border-slate-100">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Overall Progress</span>
+              <span className="text-xs font-bold text-blue-600" aria-hidden="true">{progressPercent}%</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-blue-600 h-full transition-all duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+                role="progressbar"
+                aria-valuenow={progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Scan progress"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="p-0">
           <div className="grid grid-cols-1">
