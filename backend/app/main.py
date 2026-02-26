@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -26,9 +27,11 @@ def _expiry_worker():
         time.sleep(60)
         try:
             with scans_db_lock:
+                now = datetime.utcnow()
+                timeout = settings.SCAN_TIMEOUT
                 mutated = False
                 for scan_obj in list(scans_db.values()):
-                    if scans._expire_scan_if_timed_out(scan_obj):
+                    if scans._expire_scan_if_timed_out(scan_obj, now, timeout):
                         mutated = True
                 if mutated:
                     persist_state(scans_db, projects_db)
