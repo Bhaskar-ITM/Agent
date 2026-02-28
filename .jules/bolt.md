@@ -32,3 +32,7 @@
 ## 2026-02-20 - Connection Pooling for External Service Clients
 **Learning:** Initializing a new TCP connection for every HTTP request is expensive, especially for internal services or APIs called frequently (like Jenkins). The `requests` library in Python creates a new session (and thus a new connection) for every call to `requests.request()`.
 **Action:** Use `requests.Session()` within service clients to enable connection pooling. This allows the reuse of underlying TCP connections, reducing latency and resource consumption significantly for sequential requests to the same host.
+
+## 2026-02-24 - Batching Disk I/O and Streaming JSON
+**Learning:** Performing disk writes within a loop (O(N)) is a major bottleneck as the dataset grows. Furthermore, `json.dumps` creates a full string representation of the data in memory before writing, which can lead to memory spikes for large state files.
+**Action:** Always batch state persistence calls outside of loops. Use `json.dump` and `json.load` with file handles to stream data directly to/from disk, minimizing memory overhead and reducing I/O frequency to O(1).

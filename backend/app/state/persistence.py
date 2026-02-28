@@ -44,8 +44,11 @@ def persist_state(scans_db: dict, projects_db: dict) -> None:
         }
 
         try:
+            # Performance Optimization (Bolt ⚡): Use json.dump with a file handle (streaming)
+            # instead of json.dumps to minimize memory overhead by avoiding large intermediate string allocations.
             state_file.parent.mkdir(parents=True, exist_ok=True)
-            tmp.write_text(json.dumps(payload))
+            with tmp.open("w") as f:
+                json.dump(payload, f)
             tmp.replace(state_file)
         except Exception:
             logger.exception("Failed to persist control-plane state")
@@ -57,7 +60,10 @@ def restore_state() -> tuple[dict, dict]:
         return {}, {}
 
     try:
-        payload = json.loads(state_file.read_text())
+        # Performance Optimization (Bolt ⚡): Use json.load with a file handle (streaming)
+        # to efficiently recover state without loading the entire raw file content into memory as a string.
+        with state_file.open("r") as f:
+            payload = json.load(f)
     except Exception:
         logger.exception("Failed to parse persisted state; starting fresh")
         return {}, {}
