@@ -26,9 +26,13 @@ def _expiry_worker():
         time.sleep(60)
         try:
             with scans_db_lock:
+                # Performance Optimization (Bolt ⚡): Pre-calculating values and batching persistence.
+                # Prevents O(N) disk writes and redundant calculations in the background worker.
+                now = datetime.utcnow()
+                timeout_seconds = settings.SCAN_TIMEOUT
                 mutated = False
                 for scan_obj in list(scans_db.values()):
-                    if scans._expire_scan_if_timed_out(scan_obj):
+                    if scans._expire_scan_if_timed_out(scan_obj, now=now, timeout_seconds=timeout_seconds):
                         mutated = True
                 if mutated:
                     persist_state(scans_db, projects_db)

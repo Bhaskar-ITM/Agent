@@ -110,13 +110,19 @@ def _validate_callback_artifacts(stages: list[dict]):
                 raise HTTPException(status_code=400, detail="artifact_sha256 must be hexadecimal")
 
 
-def _expire_scan_if_timed_out(scan_obj):
+def _expire_scan_if_timed_out(scan_obj, now=None, timeout_seconds=None):
+    # Performance Optimization (Bolt ⚡): Accepts pre-calculated 'now' and 'timeout_seconds'
+    # to avoid redundant datetime.utcnow() and setting lookups during bulk processing.
     if scan_obj.state in TERMINAL_STATES:
         return False
 
-    now = datetime.utcnow()
+    if now is None:
+        now = datetime.utcnow()
+    if timeout_seconds is None:
+        timeout_seconds = settings.SCAN_TIMEOUT
+
     reference_time = scan_obj.started_at or scan_obj.created_at
-    if now - reference_time > timedelta(seconds=settings.SCAN_TIMEOUT):
+    if now - reference_time > timedelta(seconds=timeout_seconds):
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
 
@@ -124,7 +130,7 @@ def _expire_scan_if_timed_out(scan_obj):
         if project:
             project["last_scan_state"] = scan_obj.state
 
-        logger.warning("Scan %s exceeded timeout (%s sec) and was marked FAILED", scan_obj.scan_id, settings.SCAN_TIMEOUT)
+        logger.warning("Scan %s exceeded timeout (%s sec) and was marked FAILED", scan_obj.scan_id, timeout_seconds)
         return True
     return False
 
@@ -148,9 +154,16 @@ def _scan_to_response(scan_obj):
 @router.get("/scans", response_model=list[ScanResponse])
 def list_scans():
     with scans_db_lock:
+        # Performance Optimization (Bolt ⚡): Pre-calculating values and batching persistence.
+        # Prevents O(N) disk writes by persisting once after checking all scans.
+        now = datetime.utcnow()
+        timeout_seconds = settings.SCAN_TIMEOUT
+        mutated = False
         for scan_obj in scans_db.values():
-            if _expire_scan_if_timed_out(scan_obj):
-                persist_state(scans_db, projects_db)
+            if _expire_scan_if_timed_out(scan_obj, now=now, timeout_seconds=timeout_seconds):
+                mutated = True
+        if mutated:
+            persist_state(scans_db, projects_db)
         return [_scan_to_response(s) for s in scans_db.values()]
 
 
