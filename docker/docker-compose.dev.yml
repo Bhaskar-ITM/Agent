@@ -9,12 +9,20 @@ services:
     volumes:
       - ../backend:/app/backend
       - ../storage/dev:/app/backend/storage/dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  celery_worker:
+    env_file:
+      - ../.env.dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     env_file:
       - ../.env.dev
     ports:
-      - "5173:5173"
+      - "8173:5173"
     volumes:
       - ..:/app
       - /app/node_modules
@@ -23,7 +31,7 @@ services:
     env_file:
       - ../.env.dev
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   jenkins:
     image: jenkins/jenkins:lts-jdk17

@@ -10,6 +10,11 @@ services:
     volumes:
       - ../storage/staging:/app/backend/storage/staging
 
+  celery_worker:
+    env_file:
+      - ../.env.staging
+    restart: unless-stopped
+
   frontend:
     env_file:
       - ../.env.staging
@@ -22,13 +27,3 @@ services:
       - ../.env.staging
     restart: unless-stopped
 
-  jenkins:
-    image: jenkins/jenkins:lts-jdk17
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-
-  kali:
-    image: kalilinux/kali-rolling
-    restart: unless-stopped
-    command: ["/bin/sh", "-c", "tail -f /dev/null"]

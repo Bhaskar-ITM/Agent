@@ -1,19 +1,50 @@
 from fastapi.testclient import TestClient
-
 from app.main import app
-from app.api.projects import projects_db
-from app.api.scans import scans_db
+from app.core.db import SessionLocal, engine, Base
+from app.models.db_models import ProjectDB, ScanDB
+from app.state.scan_state import ScanState
+from datetime import datetime
+import pytest
+from unittest.mock import patch, MagicMock
 
 
-client = TestClient(app)
+@pytest.fixture(autouse=True)
+def setup_database():
+    """Setup and teardown database for each test"""
+    # Create tables
+    Base.metadata.create_all(bind=engine)
+    yield
+    # Drop tables after test
+    Base.metadata.drop_all(bind=engine)
 
 
-def setup_function():
-    projects_db.clear()
-    scans_db.clear()
+@pytest.fixture
+def db_session():
+    """Provide a database session for tests"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-def test_callback_syncs_project_last_scan_state_on_success():
+@pytest.fixture
+def client():
+    """Provide a test client"""
+    return TestClient(app)
+
+
+@pytest.fixture
+def mock_celery_task():
+    """Mock the Celery task to avoid Redis connection"""
+    with patch("app.tasks.jenkins_tasks.trigger_jenkins_scan_async") as mock:
+        mock.delay = MagicMock(return_value=MagicMock(id="test-task-id"))
+        yield mock
+
+
+def test_callback_syncs_project_last_scan_state_on_success(client, db_session, mock_celery_task):
+    """Test that callback updates project last_scan_state on success"""
+    # 1. Create project
     project_response = client.post(
         "/api/v1/projects",
         json={
@@ -27,6 +58,7 @@ def test_callback_syncs_project_last_scan_state_on_success():
     assert project_response.status_code == 200
     project_id = project_response.json()["project_id"]
 
+    # 2. Trigger scan
     scan_response = client.post(
         "/api/v1/scans",
         json={
@@ -37,17 +69,27 @@ def test_callback_syncs_project_last_scan_state_on_success():
     assert scan_response.status_code == 201
     scan_id = scan_response.json()["scan_id"]
 
+    # 3. Simulate callback from Jenkins with SUCCESS
     callback_response = client.post(
         f"/api/v1/scans/{scan_id}/callback",
         json={"status": "SUCCESS", "stages": []},
+        headers={"X-Callback-Token": "test-callback-token-1234567890"}
     )
 
     assert callback_response.status_code == 200
-    assert scans_db[scan_id].state == "COMPLETED"
-    assert projects_db[project_id]["last_scan_state"] == "COMPLETED"
+    
+    # 4. Verify scan state updated
+    scan_obj = db_session.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    assert scan_obj.state == ScanState.COMPLETED
+    
+    # 5. Verify project last_scan_state synced
+    project_obj = db_session.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
+    assert project_obj.last_scan_state == "COMPLETED"
 
 
-def test_callback_syncs_project_last_scan_state_on_failure():
+def test_callback_syncs_project_last_scan_state_on_failure(client, db_session, mock_celery_task):
+    """Test that callback updates project last_scan_state on failure"""
+    # 1. Create project
     project_response = client.post(
         "/api/v1/projects",
         json={
@@ -61,6 +103,7 @@ def test_callback_syncs_project_last_scan_state_on_failure():
     assert project_response.status_code == 200
     project_id = project_response.json()["project_id"]
 
+    # 2. Trigger scan
     scan_response = client.post(
         "/api/v1/scans",
         json={
@@ -71,11 +114,20 @@ def test_callback_syncs_project_last_scan_state_on_failure():
     assert scan_response.status_code == 201
     scan_id = scan_response.json()["scan_id"]
 
+    # 3. Simulate callback from Jenkins with FAILURE
     callback_response = client.post(
         f"/api/v1/scans/{scan_id}/callback",
         json={"status": "FAILURE", "stages": []},
+        headers={"X-Callback-Token": "test-callback-token-1234567890"}
     )
 
     assert callback_response.status_code == 200
-    assert scans_db[scan_id].state == "FAILED"
-    assert projects_db[project_id]["last_scan_state"] == "FAILED"
+    
+    # 4. Verify scan state updated
+    scan_obj = db_session.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    assert scan_obj.state == ScanState.FAILED
+    
+    # 5. Verify project last_scan_state synced
+    project_obj = db_session.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
+    assert project_obj.last_scan_state == "FAILED"
+

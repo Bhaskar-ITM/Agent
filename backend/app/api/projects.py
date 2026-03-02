@@ -1,39 +1,46 @@
 import uuid
-
-from fastapi import APIRouter, HTTPException
-
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 from app.schemas.project import ProjectCreate, ProjectResponse
-from app.state.persistence import persist_state
-from app.state.store import projects_db, scans_db
+from app.core.db import get_db
+from app.models.db_models import ProjectDB
 
 router = APIRouter()
 
-
 @router.get("/projects", response_model=list[dict])
-def list_projects():
+def list_projects(db: Session = Depends(get_db)):
+    db_projects = db.query(ProjectDB).all()
     return [
         {
-            "project_id": p["project_id"],
-            "name": p["name"],
-            "last_scan_state": p.get("last_scan_state", "NONE"),
+            "project_id": p.project_id,
+            "name": p.name,
+            "last_scan_state": p.last_scan_state or "NONE",
         }
-        for p in projects_db.values()
+        for p in db_projects
     ]
 
-
 @router.post("/projects", response_model=ProjectResponse)
-def create_project(project: ProjectCreate):
+def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     project_id = str(uuid.uuid4())
-    project_data = project.model_dump()
-    project_data["project_id"] = project_id
-    project_data["status"] = "CREATED"
-    projects_db[project_id] = project_data
-    persist_state(scans_db, projects_db)
-    return project_data
-
+    db_project = ProjectDB(
+        project_id=project_id,
+        name=project.name,
+        git_url=str(project.git_url) if project.git_url else None,
+        branch=project.branch,
+        credentials_id=project.credentials_id,
+        sonar_key=project.sonar_key,
+        target_ip=project.target_ip,
+        target_url=str(project.target_url) if project.target_url else None,
+        status="CREATED"
+    )
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return db_project
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
-def get_project(project_id: str):
-    if project_id not in projects_db:
+def get_project(project_id: str, db: Session = Depends(get_db)):
+    db_project = db.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
+    if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return projects_db[project_id]
+    return dict(db_project.__dict__)

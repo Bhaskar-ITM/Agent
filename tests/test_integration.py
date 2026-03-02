@@ -1,13 +1,34 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.db import SessionLocal, engine, Base
+from app.models.db_models import ProjectDB, ScanDB
+from app.state.scan_state import ScanState
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
-client = TestClient(app)
 
-@patch("app.infrastructure.jenkins.jenkins_client.JenkinsClient.trigger_pipeline")
-def test_integration_v1(mock_trigger):
-    mock_trigger.return_value = {"status": "queued"}
+@pytest.fixture(autouse=True)
+def setup_database():
+    """Setup and teardown database for each test"""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def client():
+    """Provide a test client"""
+    return TestClient(app)
+
+
+@patch("app.tasks.jenkins_tasks.trigger_jenkins_scan_async")
+def test_integration_v1(mock_celery_task):
+    """Test the complete integration flow: create project -> trigger scan -> get status -> get results"""
+    # Mock the Celery task to avoid actually calling Celery
+    mock_celery_task.delay = MagicMock(return_value=MagicMock(id="test-task-id"))
+    
+    client = TestClient(app)
+    
     # 1. Create project with snake_case
     project_data = {
         "name": "Integration Project",
@@ -37,19 +58,23 @@ def test_integration_v1(mock_trigger):
 
     # Assert output matches spec
     assert "scan_id" in data
-    assert data["state"] == "RUNNING"
+    # Scan is created as QUEUED in the database
+    assert data["state"] == "QUEUED"
 
     scan_id = data["scan_id"]
 
     # 3. Get Status
     response = client.get(f"/api/v1/scans/{scan_id}")
     assert response.status_code == 200
-    assert response.json()["state"] == "RUNNING"
+    scan_state = response.json()["state"]
+    assert scan_state == "QUEUED"
 
     # 4. Get Results
     response = client.get(f"/api/v1/scans/{scan_id}/results")
     assert response.status_code == 200
     assert "results" in response.json()
 
+
 if __name__ == "__main__":
     pytest.main([__file__])
+

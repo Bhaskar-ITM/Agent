@@ -2,17 +2,20 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 import logging
+import uuid
+from typing import List
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status, Depends, Request
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
 from app.services.jenkins_service import jenkins_service
-from app.services.scan_orchestrator import create_scan_object
 from app.services.validation import VALID_STAGES, validate_scan_request
-from app.state.persistence import persist_state
 from app.state.scan_state import ScanState
-from app.state.store import projects_db, scans_db, scans_db_lock
+from app.core.db import get_db
+from app.models.db_models import ScanDB, ProjectDB
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -21,6 +24,34 @@ TERMINAL_STATES = {ScanState.COMPLETED, ScanState.FAILED, ScanState.CANCELLED}
 ACTIVE_STATES = {ScanState.CREATED, ScanState.QUEUED, ScanState.RUNNING}
 MAX_ARTIFACT_URL_LENGTH = 2048
 MAX_ARTIFACT_SIZE_BYTES = 50 * 1024 * 1024
+
+# Stage-specific timeouts (in seconds)
+STAGE_TIMEOUTS = {
+    "git_checkout": 300,        # 5 minutes
+    "sonar_scanner": 900,       # 15 minutes
+    "sonar_quality_gate": 600,  # 10 minutes
+    "npm_pip_install": 600,     # 10 minutes
+    "dependency_check": 900,    # 15 minutes
+    "trivy_fs_scan": 600,       # 10 minutes
+    "docker_build": 900,        # 15 minutes
+    "docker_push": 600,         # 10 minutes
+    "trivy_image_scan": 600,    # 10 minutes
+    "nmap_scan": 300,           # 5 minutes
+    "zap_scan": 1800,           # 30 minutes
+}
+
+def calculate_scan_timeout(selected_stages: list) -> int:
+    """Calculate dynamic timeout based on selected stages"""
+    if not selected_stages:
+        # Default: all stages
+        return sum(STAGE_TIMEOUTS.values())
+    
+    total = 0
+    for stage in selected_stages:
+        total += STAGE_TIMEOUTS.get(stage, 300)  # Default 5 min per unknown stage
+    
+    # Add 20% buffer for overhead
+    return int(total * 1.2)
 
 JENKINS_STAGE_NAME_TO_ID = {
     "Git Checkout": "git_checkout",
@@ -38,7 +69,9 @@ JENKINS_STAGE_NAME_TO_ID = {
 
 STAGE_STATUS_MAP = {
     "PASSED": "PASS",
+    "PASS": "PASS",
     "FAILED": "FAIL",
+    "FAIL": "FAIL",
     "SUCCESS": "PASS",
     "FAILURE": "FAIL",
     "SKIPPED": "SKIPPED",
@@ -110,7 +143,7 @@ def _validate_callback_artifacts(stages: list[dict]):
                 raise HTTPException(status_code=400, detail="artifact_sha256 must be hexadecimal")
 
 
-def _expire_scan_if_timed_out(scan_obj):
+def _expire_scan_if_timed_out(db: Session, scan_obj: ScanDB, project_obj: ProjectDB) -> bool:
     if scan_obj.state in TERMINAL_STATES:
         return False
 
@@ -119,22 +152,20 @@ def _expire_scan_if_timed_out(scan_obj):
     if now - reference_time > timedelta(seconds=settings.SCAN_TIMEOUT):
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
+        project_obj.last_scan_state = scan_obj.state.value
 
-        project = projects_db.get(scan_obj.project_id)
-        if project:
-            project["last_scan_state"] = scan_obj.state
-
+        db.commit()
         logger.warning("Scan %s exceeded timeout (%s sec) and was marked FAILED", scan_obj.scan_id, settings.SCAN_TIMEOUT)
         return True
     return False
 
 
-def _scan_to_response(scan_obj):
+def _scan_to_response(scan_obj: ScanDB) -> dict:
     return {
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
         "scan_mode": scan_obj.scan_mode,
-        "state": scan_obj.state,
+        "state": scan_obj.state.value if hasattr(scan_obj.state, "value") else str(scan_obj.state),
         "selected_stages": scan_obj.selected_stages,
         "created_at": scan_obj.created_at,
         "started_at": scan_obj.started_at,
@@ -142,179 +173,211 @@ def _scan_to_response(scan_obj):
         "results": scan_obj.stage_results,
     }
 
-
-
-
-@router.get("/scans", response_model=list[ScanResponse])
-def list_scans():
-    with scans_db_lock:
-        for scan_obj in scans_db.values():
-            if _expire_scan_if_timed_out(scan_obj):
-                persist_state(scans_db, projects_db)
-        return [_scan_to_response(s) for s in scans_db.values()]
-
+@router.get("/scans", response_model=List[ScanResponse])
+@limiter.limit("50/minute")
+def list_scans(request: Request, db: Session = Depends(get_db)):
+    scans = db.query(ScanDB).all()
+    for scan_obj in scans:
+        project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+        if project_obj:
+            _expire_scan_if_timed_out(db, scan_obj, project_obj)
+    return [_scan_to_response(s) for s in db.query(ScanDB).all()]
 
 @router.post("/scans", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
-def trigger_scan(scan: ScanCreate):
+@limiter.limit("10/minute")
+def trigger_scan(request: Request, scan: ScanCreate, db: Session = Depends(get_db), x_scan_timeout: str | None = Header(default=None, alias="X-Scan-Timeout")):
     try:
         validate_scan_request(scan)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    with scans_db_lock:
-        project = projects_db[scan.project_id]
+    project = db.query(ProjectDB).filter(ProjectDB.project_id == scan.project_id).first()
+    if not project:
+         raise HTTPException(status_code=404, detail="Project not found")
 
-        # Performance Optimization (Bolt ⚡): O(1) lookup of active scan state via project metadata.
-        # Previously, this was an O(N) linear search over the entire scans_db, which degraded as history grew.
-        if project.get("last_scan_state") in ACTIVE_STATES:
-            raise HTTPException(
-                status_code=409,
-                detail="An active scan already exists for this project",
-            )
-        scan_obj = create_scan_object(
-            project_id=scan.project_id,
-            scan_mode=scan.scan_mode,
-            selected_stages=scan.selected_stages,
+    if project.last_scan_state and project.last_scan_state in [state.value for state in ACTIVE_STATES]:
+        raise HTTPException(
+            status_code=409,
+            detail="An active scan already exists for this project",
         )
 
-        scan_obj.state = ScanState.QUEUED
-        scans_db[scan_obj.scan_id] = scan_obj
-        project["last_scan_state"] = scan_obj.state
-        persist_state(scans_db, projects_db)
+    scan_id = str(uuid.uuid4())
 
-    accepted, queue_id = jenkins_service.trigger_scan_job(scan_obj, project)
+    # Calculate dynamic timeout based on selected stages
+    scan_timeout = calculate_scan_timeout(scan.selected_stages)
 
-    with scans_db_lock:
-        if not accepted:
-            scan_obj.state = ScanState.FAILED
-            scan_obj.finished_at = datetime.utcnow()
-            project["last_scan_state"] = scan_obj.state
-        else:
-            scan_obj.state = ScanState.RUNNING
-            scan_obj.started_at = datetime.utcnow()
-            if queue_id is not None:
-                scan_obj.jenkins_queue_id = str(queue_id)
-            project["last_scan_state"] = scan_obj.state
+    # Allow manual timeout override via X-Scan-Timeout header
+    if x_scan_timeout:
+        try:
+            override_timeout = int(x_scan_timeout)
+            if override_timeout > 0:
+                scan_timeout = override_timeout
+                logger.info(f"Scan timeout overridden via header: {scan_timeout} seconds ({scan_timeout/60:.1f} minutes)")
+            else:
+                logger.warning(f"Invalid X-Scan-Timeout header value ({x_scan_timeout}), using calculated timeout")
+        except ValueError:
+            logger.warning(f"Invalid X-Scan-Timeout header value ({x_scan_timeout}), using calculated timeout")
+    
+    scan_obj = ScanDB(
+        scan_id=scan_id,
+        project_id=scan.project_id,
+        scan_mode=scan.scan_mode,
+        selected_stages=scan.selected_stages or [],
+        state=ScanState.QUEUED,
+        created_at=datetime.utcnow(),
+        jenkins_build_number=None,
+        jenkins_queue_id=None,
+        stage_results=[],
+        callback_digests=[]
+    )
+    db.add(scan_obj)
+    project.last_scan_state = scan_obj.state.value
+    db.commit()
+    db.refresh(scan_obj)
 
-        persist_state(scans_db, projects_db)
+    # Explicitly map project fields to ensure proper serialization
+    project_data = {
+        "project_id": project.project_id,
+        "name": project.name,
+        "git_url": project.git_url,
+        "branch": project.branch,
+        "credentials_id": project.credentials_id,
+        "sonar_key": project.sonar_key,
+        "target_ip": project.target_ip,
+        "target_url": project.target_url,
+        "status": project.status,
+        "scan_timeout": scan_timeout,  # Pass timeout to Jenkins
+    }
+
+    logger.info(f"Project data before sending to celery: {project_data}")
+    logger.info(f"Calculated scan timeout: {scan_timeout} seconds ({scan_timeout/60:.1f} minutes)")
+
+    from app.tasks.jenkins_tasks import trigger_jenkins_scan_async
+    trigger_jenkins_scan_async.delay(
+        scan_id=scan_obj.scan_id,
+        scan_mode=scan_obj.scan_mode,
+        selected_stages=scan_obj.selected_stages,
+        project_data=project_data
+    )
 
     return _scan_to_response(scan_obj)
 
-
 @router.get("/scans/{scan_id}", response_model=ScanResponse)
-def get_scan(scan_id: str):
-    with scans_db_lock:
-        if scan_id not in scans_db:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
-            persist_state(scans_db, projects_db)
-        return _scan_to_response(scan_obj)
-
+def get_scan(scan_id: str, db: Session = Depends(get_db)):
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
+        
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if project_obj:
+        _expire_scan_if_timed_out(db, scan_obj, project_obj)
+        
+    db.refresh(scan_obj)
+    return _scan_to_response(scan_obj)
 
 @router.get("/scans/{scan_id}/results", response_model=ScanResultsResponse)
-def get_scan_results(scan_id: str):
-    with scans_db_lock:
-        if scan_id not in scans_db:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
-            persist_state(scans_db, projects_db)
-
-        return {
-            "scan_id": scan_obj.scan_id,
-            "results": scan_obj.stage_results,
-        }
-
+def get_scan_results(scan_id: str, db: Session = Depends(get_db)):
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
+        
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if project_obj:
+        _expire_scan_if_timed_out(db, scan_obj, project_obj)
+        
+    db.refresh(scan_obj)
+    return {
+        "scan_id": scan_obj.scan_id,
+        "results": scan_obj.stage_results or [],
+    }
 
 @router.get("/scans/{scan_id}/overview")
-def get_scan_overview(scan_id: str):
-    with scans_db_lock:
-        if scan_id not in scans_db:
-            raise HTTPException(status_code=404, detail="Scan not found")
-        scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
-            persist_state(scans_db, projects_db)
-        return {
-            "scan_id": scan_obj.scan_id,
-            "project_id": scan_obj.project_id,
-            "scan_mode": scan_obj.scan_mode,
-            "state": scan_obj.state,
-            "created_at": scan_obj.created_at,
-            "started_at": scan_obj.started_at,
-            "finished_at": scan_obj.finished_at,
-            "results": scan_obj.stage_results,
-        }
-
+def get_scan_overview(scan_id: str, db: Session = Depends(get_db)):
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
+        
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if project_obj:
+        _expire_scan_if_timed_out(db, scan_obj, project_obj)
+    
+    db.refresh(scan_obj)
+    return _scan_to_response(scan_obj)
 
 @router.post("/scans/{scan_id}/callback")
 def scan_callback(
     scan_id: str,
     report: dict,
+    db: Session = Depends(get_db),
     x_callback_token: str | None = Header(default=None, alias="X-Callback-Token"),
 ):
     _validate_callback_auth(x_callback_token)
 
-    with scans_db_lock:
-        if scan_id not in scans_db:
-            raise HTTPException(status_code=404, detail="Scan not found")
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
 
-        scan_obj = scans_db[scan_id]
-        if _expire_scan_if_timed_out(scan_obj):
-            persist_state(scans_db, projects_db)
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if project_obj:
+        _expire_scan_if_timed_out(db, scan_obj, project_obj)
+    
+    db.refresh(scan_obj)
 
-        callback_digest = _json_digest(report)
-        if callback_digest in scan_obj.callback_digests:
-            return {"status": "success", "idempotent": True}
+    callback_digest = _json_digest(report)
+    current_digests = scan_obj.callback_digests or []
+    if callback_digest in current_digests:
+        return {"status": "success", "idempotent": True}
 
-        if scan_obj.state in TERMINAL_STATES:
-            logger.info("Ignoring callback for terminal scan %s", scan_id)
-            scan_obj.callback_digests.add(callback_digest)
-            persist_state(scans_db, projects_db)
-            return {"status": "success", "idempotent": True}
+    if scan_obj.state in TERMINAL_STATES:
+        logger.info("Ignoring callback for terminal scan %s", scan_id)
+        current_digests.append(callback_digest)
+        # SQLAlchemy mutability for JSON fields needs assignment
+        scan_obj.callback_digests = list(current_digests)
+        db.commit()
+        return {"status": "success", "idempotent": True}
 
-        stages = report.get("stages", [])
-        if not isinstance(stages, list):
-            raise HTTPException(status_code=400, detail="stages must be a list")
+    stages = report.get("stages", [])
+    if not isinstance(stages, list):
+        raise HTTPException(status_code=400, detail="stages must be a list")
 
-        normalized_stages = [_normalize_stage(stage) for stage in stages]
-        _validate_callback_artifacts(normalized_stages)
-        scan_obj.stage_results = normalized_stages
+    normalized_stages = [_normalize_stage(stage) for stage in stages]
+    _validate_callback_artifacts(normalized_stages)
+    scan_obj.stage_results = normalized_stages
 
-        jenkins_status = str(report.get("status", "")).upper()
-        if jenkins_status == "SUCCESS":
-            scan_obj.state = ScanState.COMPLETED
-        elif jenkins_status in {"FAILURE", "ABORTED", "UNSTABLE"}:
-            scan_obj.state = ScanState.FAILED
-        else:
-            raise HTTPException(status_code=400, detail="Invalid callback status")
+    jenkins_status = str(report.get("status", "")).upper()
+    if jenkins_status == "SUCCESS":
+        scan_obj.state = ScanState.COMPLETED
+    elif jenkins_status in {"FAILURE", "ABORTED", "UNSTABLE"}:
+        scan_obj.state = ScanState.FAILED
+    else:
+        raise HTTPException(status_code=400, detail="Invalid callback status")
 
-        build_number = report.get("build_number")
-        if build_number is None:
-            build_number = report.get("buildNumber")
-        if build_number is not None:
-            scan_obj.jenkins_build_number = str(build_number)
+    build_number = report.get("build_number")
+    if build_number is None:
+        build_number = report.get("buildNumber")
+    if build_number is not None:
+        scan_obj.jenkins_build_number = str(build_number)
 
-        queue_id = report.get("queue_id")
-        if queue_id is None:
-            queue_id = report.get("queueId")
-        if queue_id is not None:
-            scan_obj.jenkins_queue_id = str(queue_id)
+    queue_id = report.get("queue_id")
+    if queue_id is None:
+        queue_id = report.get("queueId")
+    if queue_id is not None:
+        scan_obj.jenkins_queue_id = str(queue_id)
 
-        project = projects_db.get(scan_obj.project_id)
-        if project:
-            project["last_scan_state"] = scan_obj.state
+    if project_obj:
+        project_obj.last_scan_state = scan_obj.state.value
 
-        finished_at_str = report.get("finishedAt")
-        if finished_at_str:
-            try:
-                scan_obj.finished_at = datetime.fromisoformat(finished_at_str.replace("Z", "+00:00"))
-            except ValueError:
-                scan_obj.finished_at = datetime.utcnow()
-        elif scan_obj.state in TERMINAL_STATES:
+    finished_at_str = report.get("finishedAt")
+    if finished_at_str:
+        try:
+            scan_obj.finished_at = datetime.fromisoformat(finished_at_str.replace("Z", "+00:00"))
+        except ValueError:
             scan_obj.finished_at = datetime.utcnow()
+    elif scan_obj.state in TERMINAL_STATES:
+        scan_obj.finished_at = datetime.utcnow()
 
-        scan_obj.callback_digests.add(callback_digest)
-        persist_state(scans_db, projects_db)
+    current_digests.append(callback_digest)
+    scan_obj.callback_digests = list(current_digests)
+    db.commit()
 
     return {"status": "success"}

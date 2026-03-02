@@ -6,6 +6,9 @@ export type ScanStage = {
   status: string; // Using string to be more flexible with backend statuses
   summary?: string;
   artifact_url?: string;
+  artifact_size_bytes?: number;
+  artifact_sha256?: string;
+  timestamp?: string;
 };
 
 export type Project = {
@@ -23,38 +26,48 @@ export type Project = {
 export type Scan = {
   scan_id: string;
   project_id: string;
+  scan_mode?: ScanMode;
   state: 'INITIAL' | 'WAITING' | 'IN PROGRESS' | 'FINISHED' | 'FAILED' | 'CANCELLED' | 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED';
+  selected_stages?: string[];
+  created_at?: string;
   started_at?: string;
   finished_at?: string;
   results?: ScanStage[];
 };
 
+// Backend stage IDs (snake_case) - used in API calls
 export const FIXED_STAGES = [
-  'Git Checkout',
-  'Sonar Scanner',
-  'Sonar Quality Gate',
-  'NPM / PIP Install',
-  'Dependency Check',
-  'Trivy FS Scan',
-  'Docker Build',
-  'Docker Push',
-  'Trivy Image Scan',
-  'Nmap Scan',
-  'ZAP Scan'
+  'git_checkout',
+  'sonar_scanner',
+  'sonar_quality_gate',
+  'npm_pip_install',
+  'dependency_check',
+  'trivy_fs_scan',
+  'docker_build',
+  'docker_push',
+  'trivy_image_scan',
+  'nmap_scan',
+  'zap_scan'
 ] as const;
 
-export type StageName = typeof FIXED_STAGES[number];
+// Frontend display names (Title Case) - used in UI
+export const STAGE_DISPLAY_NAMES: Record<StageId, string> = {
+  'git_checkout': 'Git Checkout',
+  'sonar_scanner': 'Sonar Scanner',
+  'sonar_quality_gate': 'Sonar Quality Gate',
+  'npm_pip_install': 'NPM / PIP Install',
+  'dependency_check': 'Dependency Check',
+  'trivy_fs_scan': 'Trivy FS Scan',
+  'docker_build': 'Docker Build',
+  'docker_push': 'Docker Push',
+  'trivy_image_scan': 'Trivy Image Scan',
+  'nmap_scan': 'Nmap Scan',
+  'zap_scan': 'ZAP Scan'
+};
 
-export const STAGE_ID_MAP: Record<StageName, string> = {
-  'Git Checkout': 'git_checkout',
-  'Sonar Scanner': 'sonar_scanner',
-  'Sonar Quality Gate': 'sonar_quality_gate',
-  'NPM / PIP Install': 'npm_pip_install',
-  'Dependency Check': 'dependency_check',
-  'Trivy FS Scan': 'trivy_fs_scan',
-  'Docker Build': 'docker_build',
-  'Docker Push': 'docker_push',
-  'Trivy Image Scan': 'trivy_image_scan',
-  'Nmap Scan': 'nmap_scan',
-  'ZAP Scan': 'zap_scan'
+export type StageId = typeof FIXED_STAGES[number];
+
+// Helper to convert stage ID to display name
+export const getStageDisplayName = (stageId: StageId): string => {
+  return STAGE_DISPLAY_NAMES[stageId] || stageId;
 };

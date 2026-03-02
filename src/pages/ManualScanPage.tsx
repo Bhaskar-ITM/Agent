@@ -1,190 +1,277 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Play, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { api } from '../services/api';
-import { FIXED_STAGES, STAGE_ID_MAP } from '../types';
-import type { Project, StageName } from '../types';
-import { ChevronLeft, Play, ShieldAlert, CheckCircle2, Globe, MapPin } from 'lucide-react';
+import { FIXED_STAGES, STAGE_DISPLAY_NAMES, type StageId } from '../types';
 
 const ManualScanPage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id: projectId } = useParams();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
-  const [selectedStages, setSelectedStages] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [project, setProject] = useState<{ name: string; git_url: string; branch: string } | null>(null);
+  const [scanMode, setScanMode] = useState<'automated' | 'manual'>('manual');
+  const [selectedStages, setSelectedStages] = useState<StageId[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isProjectLoading, setIsProjectLoading] = useState(true);
 
   useEffect(() => {
-    if (id) {
-      api.projects.get(id).then(data => {
-        if (data) setProject(data);
-        setLoading(false);
-      });
-    }
-  }, [id]);
+    const fetchProject = async () => {
+      if (!projectId) return;
+      setIsProjectLoading(true);
+      try {
+        const projectData = await api.projects.get(projectId);
+        if (projectData) {
+          setProject({
+            name: projectData.name,
+            git_url: projectData.git_url,
+            branch: projectData.branch
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch project:', err);
+        setError('Failed to load project details');
+      } finally {
+        setIsProjectLoading(false);
+      }
+    };
 
-  const toggleStage = (stage: string) => {
+    fetchProject();
+  }, [projectId]);
+
+  const handleStageToggle = (stage: StageId) => {
     setSelectedStages(prev =>
-      prev.includes(stage) ? prev.filter(s => s !== stage) : [...prev, stage]
+      prev.includes(stage)
+        ? prev.filter(s => s !== stage)
+        : [...prev, stage]
     );
   };
 
-  const toggleAll = () => {
-    if (selectedStages.length === FIXED_STAGES.length) {
-      setSelectedStages([]);
-    } else {
-      setSelectedStages([...FIXED_STAGES]);
-    }
+  const handleSelectAll = () => {
+    setSelectedStages([...FIXED_STAGES]);
   };
 
-  const handleRun = async () => {
-    if (!id || selectedStages.length === 0) return;
-    setLoading(true);
+  const handleClearAll = () => {
+    setSelectedStages([]);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+    setSuccessMessage(null);
+
+    if (scanMode === 'manual' && selectedStages.length === 0) {
+      setError('Please select at least one stage for manual scan');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      // Map display names to backend snake_case identifiers
-      const backendStages = selectedStages.map(s => STAGE_ID_MAP[s as StageName]);
-      const scan = await api.scans.trigger(id, 'manual', backendStages);
-      navigate(`/scans/${scan.scan_id}`);
-    } catch (err: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-      console.error(err);
-      setError(err.response?.data?.detail || err.response?.data?.error || "Failed to trigger scan");
-      setLoading(false);
+      const scan = await api.scans.trigger(
+        projectId!,
+        scanMode,
+        scanMode === 'manual' ? selectedStages : undefined
+      );
+      setSuccessMessage(`Scan started successfully! Scan ID: ${scan.scan_id}`);
+      // Redirect to scan status page after 2 seconds
+      setTimeout(() => {
+        navigate(`/scans/${scan.scan_id}`);
+      }, 2000);
+    } catch (err: unknown) {
+      console.error('Scan trigger failed', err);
+      const errorMessage = err && typeof err === 'object' && 'response' in err
+        ? (err.response as { data?: { detail?: string } })?.data?.detail
+        : 'Scan trigger failed. Please try again.';
+      setError(errorMessage || 'Scan trigger failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const isNmapSelected = selectedStages.includes('Nmap Scan');
-  const isZapSelected = selectedStages.includes('ZAP Scan');
+  if (isProjectLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-sm p-8 flex items-center gap-4">
+          <Loader2 className="animate-spin h-6 w-6 text-blue-600" />
+          <span className="text-slate-700">Loading project details...</span>
+        </div>
+      </div>
+    );
+  }
 
-  if (loading && !project) return <div className="p-8">Loading...</div>;
-  if (!project) return <div className="p-8 text-center">Project not found</div>;
+  if (!project) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Project Not Found</h2>
+          <p className="text-slate-600 mb-6">The project you're looking for doesn't exist or has been removed.</p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <button
-        type="button"
-        onClick={() => navigate(`/projects/${id}`)}
-        aria-label="Back to project control"
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
-      >
-        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-        Back to Project Control
-      </button>
-
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3">
-          <ShieldAlert className="w-5 h-5" aria-hidden="true" />
-          <span className="font-medium">{error}</span>
-        </div>
-      )}
-
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Manual Scan Selection</h2>
-            <p className="text-slate-500 text-sm mt-1">Select the specific stages you want to execute for this scan.</p>
-          </div>
-          <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center gap-4 mb-6">
             <button
-              type="button"
-              onClick={toggleAll}
-              className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none"
-              aria-label={selectedStages.length === FIXED_STAGES.length ? 'Deselect all stages' : 'Select all stages'}
+              onClick={() => navigate(`/projects/${projectId}`)}
+              className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
             >
-              {selectedStages.length === FIXED_STAGES.length ? 'Deselect All' : 'Select All'}
+              <ArrowLeft className="w-5 h-5" />
+              Back to Project
             </button>
-            <div className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold border border-blue-100">
-              {selectedStages.length} Stages Selected
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-slate-900">Manual Scan Configuration</h1>
+              <p className="text-slate-600">Configure and trigger a manual security scan for {project.name}</p>
             </div>
           </div>
-        </div>
 
-        <div className="p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {FIXED_STAGES.map(stage => (
-              <label
-                key={stage}
-                className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 outline-none ${
-                  selectedStages.includes(stage)
-                    ? 'border-blue-500 bg-blue-50/50'
-                    : 'border-slate-100 bg-white hover:border-slate-200'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={selectedStages.includes(stage)}
-                  onChange={() => toggleStage(stage)}
-                />
-                <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
-                  selectedStages.includes(stage) ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white'
-                }`}>
-                  {selectedStages.includes(stage) && <CheckCircle2 className="w-4 h-4 text-white" aria-hidden="true" />}
-                </div>
-                <span className={`font-semibold ${selectedStages.includes(stage) ? 'text-blue-900' : 'text-slate-700'}`}>
-                  {stage}
-                </span>
-              </label>
-            ))}
-          </div>
-
-          {/* Conditional Fields (Reflecting project config) */}
-          {(isNmapSelected || isZapSelected) && (
-            <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 mb-8 space-y-6">
-              <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wider">
-                <ShieldAlert className="w-4 h-4 text-amber-500" aria-hidden="true" />
-                Additional Configuration Status
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {isNmapSelected && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Target IP (for Nmap)</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
-                      <input
-                        readOnly
-                        value={project.target_ip || 'Not set in project'}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed italic"
-                      />
-                    </div>
-                    {!project.target_ip && <p className="text-xs text-amber-600 mt-1 italic">Will fail in Manual mode</p>}
-                  </div>
-                )}
-                {isZapSelected && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Target URL (for ZAP)</label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
-                      <input
-                        readOnly
-                        value={project.target_url || 'Not set in project'}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed italic"
-                      />
-                    </div>
-                    {!project.target_url && <p className="text-xs text-amber-600 mt-1 italic">Will fail in Manual mode</p>}
-                  </div>
-                )}
-              </div>
+          {error && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              {error}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => navigate(`/projects/${id}`)}
-              className="px-6 py-3 text-slate-600 font-semibold hover:bg-slate-50 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleRun}
-              disabled={selectedStages.length === 0 || loading}
-              className="px-10 py-3 bg-slate-900 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-            >
-              <Play className="w-4 h-4 fill-current" aria-hidden="true" />
-              {loading ? 'Starting Scan...' : 'Start Manual Scan'}
-            </button>
-          </div>
+          {successMessage && (
+            <div className="bg-green-50 text-green-600 p-4 rounded-lg mb-6 flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
+              {successMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Project Information */}
+            <div className="bg-slate-50 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Project Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-slate-500">Project Name:</span>
+                  <span className="ml-2 font-medium">{project.name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Git URL:</span>
+                  <span className="ml-2 font-medium">{project.git_url}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Branch:</span>
+                  <span className="ml-2 font-medium">{project.branch}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Scan Mode Selection */}
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Scan Configuration</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-3">Scan Mode</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        value="automated"
+                        checked={scanMode === 'automated'}
+                        onChange={(e) => setScanMode(e.target.value as 'automated' | 'manual')}
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="font-medium text-slate-900">Automated Scan</div>
+                        <div className="text-sm text-slate-600">Run all security stages automatically</div>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        value="manual"
+                        checked={scanMode === 'manual'}
+                        onChange={(e) => setScanMode(e.target.value as 'automated' | 'manual')}
+                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="font-medium text-slate-900">Manual Scan</div>
+                        <div className="text-sm text-slate-600">Select specific stages to run</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Stage Selection */}
+                {scanMode === 'manual' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-3">Select Stages</label>
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                      {FIXED_STAGES.map((stageId) => (
+                        <label key={stageId} className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded">
+                          <input
+                            type="checkbox"
+                            checked={selectedStages.includes(stageId)}
+                            onChange={() => handleStageToggle(stageId)}
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-slate-900">{STAGE_DISPLAY_NAMES[stageId]}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={handleSelectAll}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={handleClearAll}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="animate-spin h-4 w-4" />
+                    Starting Scan...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Start Scan
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/projects/${projectId}`)}
+                className="border border-slate-300 text-slate-700 font-semibold px-6 py-3 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

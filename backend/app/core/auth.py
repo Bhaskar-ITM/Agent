@@ -1,19 +1,55 @@
-from fastapi import HTTPException, Request, Security
-from fastapi.security import APIKeyHeader
+from fastapi import Depends, HTTPException, Request, Security, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core import security
+from app.core.db import get_db
+from app.models.db_models import UserDB
+from app.schemas.token import TokenData
 
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
-
-def require_api_key(request: Request, api_key: str | None = Security(api_key_header)) -> str:
+def get_current_user(
+    request: Request,
+    token: str | None = Security(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
     if settings.ENV == "test":
-        return "test-bypass"
+        return type("User", (), {"username": "test-bypass"})()
 
     # Callback endpoint has its own dedicated shared-secret guard.
     if request.url.path.endswith("/callback"):
-        return "callback-path"
+        return type("User", (), {"username": "callback-bypass"})()
 
-    if api_key != settings.API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return api_key
+    if not token:
+        # Fallback to API Key logic for Jenkins/external scripts that haven't migrated
+        api_key = request.headers.get("X-API-Key")
+        if api_key and api_key == settings.API_KEY:
+            return type("User", (), {"username": "api-key-bypass"})()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(UserDB).filter(UserDB.username == token_data.username).first()
+    if user is None:
+        raise credentials_exception
+    return user

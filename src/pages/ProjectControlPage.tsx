@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import type { Project } from '../types';
 import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X, Copy, Check } from 'lucide-react';
 
 const ProjectControlPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<{ project_id: string; name: string; git_url: string; branch: string; sonar_key: string; target_ip?: string; target_url?: string; last_scan_state?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [hasActiveScan, setHasActiveScan] = useState(false);
@@ -50,13 +49,14 @@ const ProjectControlPage = () => {
       setError(null);
       const scan = await api.scans.trigger(id, 'automated');
       navigate(`/scans/${scan.scan_id}`);
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { status?: number; data?: { detail?: string } } };
+      if (errorObj?.response?.status === 409) {
         setError('A scan is already running. Please wait for it to complete.');
-      } else if (err?.response?.status === 401) {
+      } else if (errorObj?.response?.status === 401) {
         setError('Unauthorized. Verify API key configuration.');
       } else {
-        setError(err?.response?.data?.detail || 'Failed to trigger scan');
+        setError(errorObj?.response?.data?.detail || 'Failed to trigger scan');
       }
       setLoading(false);
       setShowConfirm(false);

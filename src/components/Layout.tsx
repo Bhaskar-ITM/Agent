@@ -1,11 +1,14 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Shield, LayoutDashboard, PlusCircle, LogOut } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
+    logout();
     navigate('/login');
   };
 

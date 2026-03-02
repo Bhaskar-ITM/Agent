@@ -22,13 +22,7 @@ ENVIRONMENTS = {
     "test": {
         "env_file": REPO_ROOT / ".env.test",
         "overlay": DOCKER_DIR / "docker-compose.test.yml",
-        "up_args": [
-            "up",
-            "--build",
-            "--abort-on-container-exit",
-            "--exit-code-from",
-            "backend-test",
-        ],
+        "up_args": ["up", "--build", "-d"],
     },
     "staging": {
         "env_file": REPO_ROOT / ".env.staging",

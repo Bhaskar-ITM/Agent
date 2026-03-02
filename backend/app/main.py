@@ -1,40 +1,53 @@
 import logging
 import os
-import threading
-import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
-from app.api import projects, scans
-from app.core.auth import require_api_key
+from app.api import projects, scans, auth
+from app.core.auth import get_current_user
 from app.core.config import settings
-from app.state.persistence import persist_state, restore_state
-from app.state.store import projects_db, scans_db, scans_db_lock
+from app.core.db import engine, Base
+from app.core.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
+# Public endpoints that don't require authentication
+PUBLIC_ENDPOINTS = [
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/",
+    "/docs",
+    "/redoc",
+    "/openapi.json"
+]
+
+def public_endpoint_only(request):
+    """Dependency that allows access to public endpoints without auth"""
+    if any(request.url.path.startswith(endpoint) for endpoint in PUBLIC_ENDPOINTS):
+        return True
+    # For non-public endpoints, require authentication
+    return Depends(get_current_user)
+
 app = FastAPI(
     title="DevSecOps Control Plane API",
-    dependencies=[Depends(require_api_key)],
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def _expiry_worker():
-    logger.info("Scan expiry worker started")
-    while True:
-        time.sleep(60)
-        try:
-            with scans_db_lock:
-                mutated = False
-                for scan_obj in list(scans_db.values()):
-                    if scans._expire_scan_if_timed_out(scan_obj):
-                        mutated = True
-                if mutated:
-                    persist_state(scans_db, projects_db)
-        except Exception:
-            logger.exception("Expiry worker encountered an error")
-
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.on_event("startup")
 def validate_configuration():
@@ -45,26 +58,19 @@ def validate_configuration():
     if not settings.STORAGE_PATH:
         raise RuntimeError("STORAGE_PATH is required")
 
-    worker_count = int(os.environ.get("WEB_CONCURRENCY", "1"))
-    if worker_count > 1:
-        raise RuntimeError(f"WEB_CONCURRENCY={worker_count} is forbidden. This application requires exactly 1 worker.")
-
     Path(settings.STORAGE_PATH).mkdir(parents=True, exist_ok=True)
+    
+    # Initialize DB schema
+    Base.metadata.create_all(bind=engine)
 
-    restored_scans, restored_projects = restore_state()
-    with scans_db_lock:
-        scans_db.clear()
-        scans_db.update(restored_scans)
-        projects_db.clear()
-        projects_db.update(restored_projects)
+# Auth routes are public - no authentication required
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 
-    threading.Thread(target=_expiry_worker, daemon=True, name="expiry-worker").start()
-
-
-app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
-app.include_router(scans.router, prefix="/api/v1", tags=["scans"])
-
+# Protected routes - require authentication
+protected_deps = [Depends(get_current_user)]
+app.include_router(projects.router, prefix="/api/v1", tags=["projects"], dependencies=protected_deps)
+app.include_router(scans.router, prefix="/api/v1", tags=["scans"], dependencies=protected_deps)
 
 @app.get("/")
 def read_root():
-    return {"message": "DevSecOps Control Plane is live"}
+    return {"message": "DevSecOps Control Plane is live (via PostgreSQL)"}

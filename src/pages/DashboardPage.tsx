@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useMemo, memo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Project } from '../types';
@@ -17,11 +18,10 @@ const ProjectRow = memo(({ project }: { project: Project }) => (
     </td>
     <td className="px-6 py-4">
       <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${
-          project.last_scan_state === 'COMPLETED' ? 'bg-green-500' :
-          project.last_scan_state === 'FAILED' ? 'bg-red-500' :
-          project.last_scan_state === 'RUNNING' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
-        }`} />
+        <span className={`w-2 h-2 rounded-full ${project.last_scan_state === 'COMPLETED' ? 'bg-green-500' :
+            project.last_scan_state === 'FAILED' ? 'bg-red-500' :
+              project.last_scan_state === 'RUNNING' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
+          }`} />
         <span className="text-sm font-medium text-slate-700">
           {project.last_scan_state || 'No scans yet'}
         </span>
@@ -44,9 +44,13 @@ ProjectRow.displayName = 'ProjectRow';
 const ACTIVE_STATES = new Set(['CREATED', 'QUEUED', 'RUNNING']);
 
 const DashboardPage = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
+
+  const { data: projects = [], isLoading: loading } = useQuery({
+    queryKey: ['projects'],
+    queryFn: api.projects.list,
+    refetchInterval: 10000,
+  });
 
   // Performance: Debounce search input to avoid re-filtering and re-renders on every keystroke
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -67,13 +71,6 @@ const DashboardPage = () => {
       project.name.toLowerCase().includes(lowerSearch)
     );
   }, [projects, debouncedSearchTerm]);
-
-  useEffect(() => {
-    api.projects.list().then(data => {
-      setProjects(data);
-      setLoading(false);
-    });
-  }, []);
 
   if (loading) return <div className="p-8">Loading projects...</div>;
 

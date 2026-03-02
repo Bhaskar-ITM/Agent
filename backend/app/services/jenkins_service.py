@@ -29,12 +29,13 @@ class JenkinsService:
         # If it's already a dict from a Pydantic model with aliases, this might be redundant
         # but let's be explicit.
 
+        # Build payload for Jenkins pipeline
         payload = {
             "SCAN_ID": scan.scan_id,
-            "MODE": scan.scan_mode.upper(),
+            "SCAN_MODE": scan.scan_mode.upper(),
             "PROJECT_DATA": json.dumps({
                 "project_id": project_data.get("project_id"),
-                "name": project_data.get("name"),
+                "project_name": project_data.get("name"),
                 "git_url": project_data.get("git_url"),
                 "branch": project_data.get("branch"),
                 "credentials_id": project_data.get("credentials_id"),
@@ -43,15 +44,18 @@ class JenkinsService:
                 "target_url": project_data.get("target_url")
             }),
             "SELECTED_STAGES": json.dumps(scan.selected_stages),
+            "SCAN_TIMEOUT": str(project_data.get("scan_timeout", 7200)),  # Dynamic timeout
         }
 
         # Centralized outbound call via standardized JenkinsClient
         try:
             logger.info(f"Triggering Jenkins job for scan {scan.scan_id}")
+            logger.info(f"Jenkins payload being sent: {payload}")
             trigger_response = self.client.trigger_pipeline(
-                job_name="security-pipeline",
+                job_name="Security-pipeline",
                 parameters=payload
             )
+            logger.info(f"Jenkins trigger response: {trigger_response}")
             queue_id = None
             if isinstance(trigger_response, dict):
                 queue_id = trigger_response.get("queue_id") or trigger_response.get("queueId")

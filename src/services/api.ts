@@ -1,18 +1,53 @@
 import axios from 'axios';
-import type { Project, Scan, ScanStage, ScanMode } from '../types';
+import type { Project, Scan, ScanStage, ScanMode, StageId } from '../types';
 
 const API_BASE_URL = '/api/v1';
-const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
-    ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
   },
 });
 
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    // Fallback to API Key for external compatibility if no token exists
+    const apiKey = localStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
+    if (apiKey) {
+      config.headers['X-API-Key'] = apiKey;
+    }
+  }
+  return config;
+});
+
 export const api = {
+  auth: {
+    login: async (username: string, password: string): Promise<{ access_token: string, token_type: string }> => {
+      // OAuth2 expects form-urlencoded
+      const params = new URLSearchParams();
+      params.append('username', username);
+      params.append('password', password);
+
+      const response = await apiClient.post('/auth/login', params, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      return response.data;
+    },
+    register: async (username: string, password: string, email?: string): Promise<{ username: string }> => {
+      const response = await apiClient.post('/auth/register', {
+        username,
+        password,
+        email: email || `${username}@example.com`
+      });
+      return response.data;
+    }
+  },
   projects: {
     list: async (): Promise<Project[]> => {
       try {
@@ -46,7 +81,7 @@ export const api = {
       const response = await apiClient.get(`/scans/${id}/results`);
       return response.data.results;
     },
-    trigger: async (project_id: string, scan_mode: ScanMode, selected_stages?: string[]): Promise<Scan> => {
+    trigger: async (project_id: string, scan_mode: ScanMode, selected_stages?: StageId[]): Promise<Scan> => {
       const response = await apiClient.post('/scans', {
         project_id,
         scan_mode,
