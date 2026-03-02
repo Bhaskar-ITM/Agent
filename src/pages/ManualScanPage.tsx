@@ -7,7 +7,7 @@ import { FIXED_STAGES, STAGE_DISPLAY_NAMES, type StageId } from '../types';
 const ManualScanPage = () => {
   const { id: projectId } = useParams();
   const navigate = useNavigate();
-  const [project, setProject] = useState<{ name: string; git_url: string; branch: string } | null>(null);
+  const [project, setProject] = useState<{ name: string; git_url: string; branch: string; target_ip?: string; target_url?: string } | null>(null);
   const [scanMode, setScanMode] = useState<'automated' | 'manual'>('manual');
   const [selectedStages, setSelectedStages] = useState<StageId[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +25,9 @@ const ManualScanPage = () => {
           setProject({
             name: projectData.name,
             git_url: projectData.git_url,
-            branch: projectData.branch
+            branch: projectData.branch,
+            target_ip: projectData.target_ip,
+            target_url: projectData.target_url
           });
         }
       } catch (err) {
@@ -47,12 +49,12 @@ const ManualScanPage = () => {
     );
   };
 
-  const handleSelectAll = () => {
-    setSelectedStages([...FIXED_STAGES]);
-  };
-
-  const handleClearAll = () => {
-    setSelectedStages([]);
+  const handleToggleAll = () => {
+    if (selectedStages.length === FIXED_STAGES.length) {
+      setSelectedStages([]);
+    } else {
+      setSelectedStages([...FIXED_STAGES]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -207,38 +209,67 @@ const ManualScanPage = () => {
 
                 {/* Stage Selection */}
                 {scanMode === 'manual' && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-3">Select Stages</label>
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-slate-700">Select Stages</label>
+                      <span className="text-xs font-medium text-slate-500 px-2 py-1 bg-slate-100 rounded-full">
+                        {selectedStages.length} Stages Selected
+                      </span>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-2 border border-slate-100 rounded-lg p-2">
                       {FIXED_STAGES.map((stageId) => (
-                        <label key={stageId} className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded">
+                        <label key={stageId} className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded transition-colors">
                           <input
                             type="checkbox"
                             checked={selectedStages.includes(stageId)}
                             onChange={() => handleStageToggle(stageId)}
-                            className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 rounded border-slate-300"
                           />
                           <span className="text-slate-900">{STAGE_DISPLAY_NAMES[stageId]}</span>
                         </label>
                       ))}
                     </div>
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex mt-1">
                       <button
                         type="button"
-                        onClick={handleSelectAll}
-                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        onClick={handleToggleAll}
+                        aria-label={selectedStages.length === FIXED_STAGES.length ? "Deselect all stages" : "Select all stages"}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 transition-colors"
                       >
-                        Select All
-                      </button>
-                      <span className="text-slate-300">|</span>
-                      <button
-                        type="button"
-                        onClick={handleClearAll}
-                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        Clear All
+                        {selectedStages.length === FIXED_STAGES.length ? "Deselect All" : "Select All"}
                       </button>
                     </div>
+
+                    {/* Additional Configuration Status */}
+                    {(selectedStages.includes('nmap_scan') || selectedStages.includes('zap_scan')) && (
+                      <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-3">
+                        <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" />
+                          Additional Configuration Status
+                        </h3>
+                        {selectedStages.includes('nmap_scan') && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-blue-700 font-medium">Target IP (for Nmap)</span>
+                            <span className={project.target_ip ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
+                              {project.target_ip || 'Not Configured'}
+                            </span>
+                          </div>
+                        )}
+                        {selectedStages.includes('zap_scan') && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-blue-700 font-medium">Target URL (for ZAP)</span>
+                            <span className={project.target_url ? "text-green-600 font-bold" : "text-amber-600 font-bold"}>
+                              {project.target_url || 'Not Configured'}
+                            </span>
+                          </div>
+                        )}
+                        {(!project.target_ip && selectedStages.includes('nmap_scan')) || (!project.target_url && selectedStages.includes('zap_scan')) ? (
+                          <p className="text-[10px] text-amber-700 italic mt-1">
+                            Warning: Some selected stages require additional configuration to yield results.
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

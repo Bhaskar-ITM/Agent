@@ -2,16 +2,19 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import LoginPage from './LoginPage';
+import { AuthProvider } from '../hooks/useAuth';
 
 describe('LoginPage', () => {
   it('toggles password visibility when the eye icon is clicked', () => {
     render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
 
-    const passwordInput = screen.getByLabelText('Password') as HTMLInputElement;
+    const passwordInput = screen.getByPlaceholderText('••••••••') as HTMLInputElement;
     const toggleButton = screen.getByLabelText('Show password');
 
     // Initial state: password type
@@ -28,14 +31,16 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText('Show password')).toBeInTheDocument();
   });
 
-  it('contains an email field and a sign-in button', () => {
+  it('contains a username field and a sign-in button', () => {
     render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
 
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
   });
 });

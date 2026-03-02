@@ -3,6 +3,15 @@ import { MemoryRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { api } from '../services/api';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 vi.mock('../services/api', () => ({
   api: {
@@ -32,14 +41,19 @@ describe('DashboardPage Search', () => {
 
   it('filters projects based on search term after debounce', async () => {
     render(
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     // Initial load - need to wait for the promise to resolve AND the timers to run
     await act(async () => {
-      vi.runAllTimers();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.advanceTimersByTime(100);
     });
 
     expect(screen.getByText('Alpha Project')).toBeInTheDocument();
@@ -66,13 +80,15 @@ describe('DashboardPage Search', () => {
 
   it('shows "No projects matching" message after debounce', async () => {
     render(
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     await act(async () => {
-      vi.runAllTimers();
+      vi.advanceTimersByTime(100);
     });
 
     const searchInput = screen.getByLabelText('Search projects');
@@ -90,13 +106,15 @@ describe('DashboardPage Search', () => {
 
   it('clears search when "Clear search" button is clicked', async () => {
     render(
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     await act(async () => {
-      vi.runAllTimers();
+      vi.advanceTimersByTime(100);
     });
 
     const searchInput = screen.getByLabelText('Search projects');
