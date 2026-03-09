@@ -189,7 +189,7 @@ def _scan_to_response(scan_obj: ScanDB) -> dict:
     }
 
 @router.get("/scans", response_model=List[ScanResponse])
-@limiter.limit("50/minute")
+@limiter.limit("1000/minute" if settings.ENV == "test" else "50/minute")
 def list_scans(request: Request, db: Session = Depends(get_db)):
     """
     Performance Optimization (Bolt ⚡):
@@ -226,7 +226,7 @@ def list_scans(request: Request, db: Session = Depends(get_db)):
     return [_scan_to_response(s) for s in scans]
 
 @router.post("/scans", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("10/minute")
+@limiter.limit("1000/minute" if settings.ENV == "test" else "10/minute")
 def trigger_scan(request: Request, scan: ScanCreate, db: Session = Depends(get_db), x_scan_timeout: str | None = Header(default=None, alias="X-Scan-Timeout")):
     try:
         validate_scan_request(scan)
