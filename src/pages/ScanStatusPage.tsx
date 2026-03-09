@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, AlertCircle, CheckCircle, Clock, ExternalLink } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertCircle, CheckCircle, Clock, ExternalLink, Copy, Check, Shield } from 'lucide-react';
 import { api } from '../services/api';
-import { type Scan, type ScanStage } from '../types';
+import { type Scan, type ScanStage, type StageId, getStageDisplayName } from '../types';
 
 const ScanStatusPage = () => {
   const { id: scanId } = useParams();
@@ -12,6 +12,15 @@ const ScanStatusPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const handleCopyId = () => {
+    if (!scanId) return;
+    navigator.clipboard.writeText(scanId);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const fetchScanData = useCallback(async () => {
     if (!scanId) return;
@@ -21,6 +30,7 @@ const ScanStatusPage = () => {
       const scanData = await api.scans.get(scanId);
       if (scanData) {
         setScan(scanData);
+        setLastUpdated(new Date());
         
         if (scanData.results) {
           setStages(scanData.results);
@@ -111,24 +121,44 @@ const ScanStatusPage = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate('/dashboard')}
+                aria-label="Back to dashboard"
                 className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
                 Back to Dashboard
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Scan Status</h1>
-                <p className="text-slate-600">Scan ID: {scan.scan_id}</p>
+                <div className="flex items-center gap-2">
+                  <Shield className="w-6 h-6 text-blue-600" aria-hidden="true" />
+                  <h1 className="text-2xl font-bold text-slate-900">Scan Status</h1>
+                </div>
+                <div className="flex items-center gap-2 text-slate-600 group">
+                  <span className="text-sm">Scan ID: {scan.scan_id}</span>
+                  <button
+                    onClick={handleCopyId}
+                    className="p-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-slate-400 hover:text-blue-600"
+                    aria-label="Copy scan ID"
+                  >
+                    {isCopied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
               </div>
             </div>
-            <button
-              onClick={fetchScanData}
-              disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                onClick={fetchScanData}
+                disabled={isRefreshing}
+                className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              {lastUpdated && (
+                <span className="text-xs text-slate-400">
+                  Last updated: {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
           </div>
 
           {error && (
@@ -176,7 +206,9 @@ const ScanStatusPage = () => {
                           {getStatusIcon(stage.status)}
                         </span>
                         <div>
-                          <div className="font-medium text-slate-900">{stage.stage}</div>
+                          <div className="font-medium text-slate-900">
+                            {getStageDisplayName(stage.stage as StageId)}
+                          </div>
                           <div className="text-sm text-slate-600">{stage.status}</div>
                         </div>
                       </div>
