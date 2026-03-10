@@ -32,3 +32,7 @@
 ## 2026-02-20 - Connection Pooling for External Service Clients
 **Learning:** Initializing a new TCP connection for every HTTP request is expensive, especially for internal services or APIs called frequently (like Jenkins). The `requests` library in Python creates a new session (and thus a new connection) for every call to `requests.request()`.
 **Action:** Use `requests.Session()` within service clients to enable connection pooling. This allows the reuse of underlying TCP connections, reducing latency and resource consumption significantly for sequential requests to the same host.
+
+## 2026-03-02 - Optimized list_scans N+1 queries and batch commits
+**Learning:** The `list_scans` endpoint previously triggered an individual project lookup for every scan to check for timeouts, leading to an N+1 query bottleneck. Additionally, every timed-out scan triggered a separate `db.commit()`, causing significant I/O overhead.
+**Action:** Use batch project fetching (`.in_(project_ids)`) to resolve N+1 queries. Refactor timeout helpers to support an `auto_commit=False` flag, allowing all scan state transitions to be persisted in a single database transaction at the end of the loop.

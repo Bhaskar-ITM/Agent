@@ -144,21 +144,36 @@ def _validate_callback_artifacts(stages: list[dict]):
                 raise HTTPException(status_code=400, detail="artifact_sha256 must be hexadecimal")
 
 
-def _expire_scan_if_timed_out(db: Session, scan_obj: ScanDB, project_obj: ProjectDB) -> bool:
+def _expire_scan_if_timed_out(
+    db: Session,
+    scan_obj: ScanDB,
+    project_obj: ProjectDB,
+    now: datetime = None,
+    timeout_seconds: int = None,
+    auto_commit: bool = True
+) -> bool:
+    """
+    Checks if a scan has exceeded its timeout.
+    Performance Optimization (Bolt ⚡): Accepts pre-calculated 'now' and 'timeout_seconds'
+    to avoid redundant calls in loops. 'auto_commit' allows batching DB writes.
+    """
     if scan_obj.state in TERMINAL_STATES:
         return False
 
-    now = datetime.utcnow()
+    now = now or datetime.utcnow()
+    timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.SCAN_TIMEOUT
+
     reference_time = scan_obj.started_at or scan_obj.created_at
-    if now - reference_time > timedelta(seconds=settings.SCAN_TIMEOUT):
+    if now - reference_time > timedelta(seconds=timeout_seconds):
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
         scan_obj.error_message = f"Scan timed out after {settings.SCAN_TIMEOUT} seconds"
         scan_obj.error_type = "TIMEOUT"
         project_obj.last_scan_state = scan_obj.state.value
 
-        db.commit()
-        logger.warning("Scan %s exceeded timeout (%s sec) and was marked FAILED", scan_obj.scan_id, settings.SCAN_TIMEOUT)
+        if auto_commit:
+            db.commit()
+        logger.warning("Scan %s exceeded timeout (%s sec) and was marked FAILED", scan_obj.scan_id, timeout_seconds)
         return True
     return False
 
@@ -189,12 +204,39 @@ def _scan_to_response(scan_obj: ScanDB) -> dict:
 @router.get("/scans", response_model=List[ScanResponse])
 @limiter.limit("50/minute")
 def list_scans(request: Request, db: Session = Depends(get_db)):
+    """
+    Performance Optimization (Bolt ⚡):
+    1. Fetches all scans and relevant projects in single batch queries to solve N+1 problem.
+    2. Batches DB commits for timed-out scans.
+    3. Reuses scan objects for response, skipping redundant DB query.
+    """
     scans = db.query(ScanDB).all()
-    for scan_obj in scans:
-        project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
-        if project_obj:
-            _expire_scan_if_timed_out(db, scan_obj, project_obj)
-    return [_scan_to_response(s) for s in db.query(ScanDB).all()]
+
+    # Identify active scans that might need timeout processing
+    active_scans = [s for s in scans if s.state not in TERMINAL_STATES]
+
+    if active_scans:
+        # Batch fetch all relevant projects to avoid N+1 queries
+        project_ids = {s.project_id for s in active_scans}
+        projects = db.query(ProjectDB).filter(ProjectDB.project_id.in_(project_ids)).all()
+        project_map = {p.project_id: p for p in projects}
+
+        # Pre-calculate common values for timeout check
+        now = datetime.utcnow()
+        timeout_seconds = settings.SCAN_TIMEOUT
+        any_expired = False
+
+        for scan_obj in active_scans:
+            project_obj = project_map.get(scan_obj.project_id)
+            if project_obj:
+                if _expire_scan_if_timed_out(db, scan_obj, project_obj, now, timeout_seconds, auto_commit=False):
+                    any_expired = True
+
+        # Single commit for all processed timeouts
+        if any_expired:
+            db.commit()
+
+    return [_scan_to_response(s) for s in scans]
 
 @router.post("/scans", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
