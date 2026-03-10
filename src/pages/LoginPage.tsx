@@ -82,7 +82,9 @@ const LoginPage = () => {
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
+              Password <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+            </label>
             <div className="relative group">
               <input
                 id="password"

@@ -3,6 +3,16 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ManualScanPage from './ManualScanPage';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { api } from '../services/api';
+import { AuthProvider } from '../hooks/useAuth';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 vi.mock('../services/api', () => ({
   api: {
@@ -47,11 +57,15 @@ describe('ManualScanPage', () => {
 
   it('renders all 11 stages', async () => {
     render(
-      <MemoryRouter initialEntries={['/projects/1/manual']}>
-        <Routes>
-          <Route path="/projects/:id/manual" element={<ManualScanPage />} />
-        </Routes>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/projects/1/manual']}>
+            <Routes>
+              <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
     );
 
     expect(await screen.findByText('Git Checkout')).toBeInTheDocument();
@@ -61,11 +75,15 @@ describe('ManualScanPage', () => {
 
   it('shows additional configuration when Nmap or ZAP is selected', async () => {
     render(
-      <MemoryRouter initialEntries={['/projects/1/manual']}>
-        <Routes>
-          <Route path="/projects/:id/manual" element={<ManualScanPage />} />
-        </Routes>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/projects/1/manual']}>
+            <Routes>
+              <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
     );
 
     await screen.findByText('Git Checkout');
@@ -85,11 +103,15 @@ describe('ManualScanPage', () => {
 
   it('toggles all stages when Select All / Deselect All is clicked', async () => {
     render(
-      <MemoryRouter initialEntries={['/projects/1/manual']}>
-        <Routes>
-          <Route path="/projects/:id/manual" element={<ManualScanPage />} />
-        </Routes>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/projects/1/manual']}>
+            <Routes>
+              <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
     );
 
     await screen.findByText('Git Checkout');
