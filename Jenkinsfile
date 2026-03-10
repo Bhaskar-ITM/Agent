@@ -21,13 +21,11 @@ pipeline {
         // Use environment variable for backend URL, fallback to localhost:8000 for dev
         CALLBACK_URL = "${env.BACKEND_URL ?: 'http://localhost:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
         REPORT_DIR = "reports"
-        // Dynamic timeout from parameter (default 2 hours)
-        PIPELINE_TIMEOUT = params.SCAN_TIMEOUT ?: '7200'
     }
 
     options {
-        // Dynamic timeout based on scan complexity
-        timeout(time: Integer.parseInt(env.PIPELINE_TIMEOUT), unit: 'SECONDS')
+        // Dynamic timeout based on scan complexity (default 2 hours)
+        timeout(time: params.SCAN_TIMEOUT ? params.SCAN_TIMEOUT.toInteger() : 7200, unit: 'SECONDS')
         disableConcurrentBuilds()
         skipStagesAfterUnstable()
         // Keep build logs for debugging
@@ -121,8 +119,8 @@ pipeline {
         stage('3. Sonar Quality Gate') {
             when { expression { shouldRun('sonar_quality_gate') } }
             steps {
-                // Per-stage timeout: 10 minutes for quality gate check
-                timeout(time: 10, unit: 'MINUTES') {
+                // Per-stage timeout: 30 minutes for quality gate check (allows time for SonarQube analysis)
+                timeout(time: 30, unit: 'MINUTES') {
                     script {
                         echo "Waiting for SonarQube Quality Gate..."
                         def qg = waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
@@ -289,13 +287,47 @@ pipeline {
             script {
                 archiveArtifacts artifacts: "${env.REPORT_DIR}/**", allowEmptyArchive: true
                 
+                // Build detailed error information for failed scans
+                def errorMessage = null
+                def errorType = null
+                def jenkinsConsoleUrl = null
+                
+                if (currentBuild.currentResult == 'FAILURE' || currentBuild.currentResult == 'ABORTED') {
+                    // Get the cause of failure
+                    def failedStage = null
+                    for (stage in currentBuild.executions) {
+                        if (stage.status == 'FAILURE' || stage.status == 'ABORTED') {
+                            failedStage = stage
+                            break
+                        }
+                    }
+                    
+                    // Determine error type based on failure
+                    if (currentBuild.buildCauses?.any { it.shortDescription?.contains('Timeout') }) {
+                        errorType = 'TIMEOUT'
+                        errorMessage = "Scan timed out after ${params.SCAN_TIMEOUT ? params.SCAN_TIMEOUT / 60 : 60} minutes. The pipeline exceeded the maximum allowed execution time."
+                    } else if (failedStage) {
+                        errorType = 'PIPELINE_ERROR'
+                        errorMessage = "Pipeline failed at stage: ${failedStage.name}. Check Jenkins console for detailed error logs."
+                    } else {
+                        errorType = 'PIPELINE_ERROR'
+                        errorMessage = "Pipeline failed with status: ${currentBuild.currentResult}. Review build logs for details."
+                    }
+                    
+                    // Build Jenkins console URL
+                    jenkinsConsoleUrl = "${env.JENKINS_BASE_URL ?: 'http://localhost:8080'}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/console"
+                }
+                
                 def payload = [
                     status: currentBuild.currentResult,
                     build_number: currentBuild.number,
                     scan_id: params.SCAN_ID,
                     scan_mode: params.SCAN_MODE,
                     stages: STAGES_RESULTS ?: [],
-                    finished_at: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+                    finished_at: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')),
+                    error_message: errorMessage,
+                    error_type: errorType,
+                    jenkins_console_url: jenkinsConsoleUrl
                 ]
 
                 withCredentials([string(credentialsId: 'callback-token', variable: 'CALLBACK_TOKEN')]) {
@@ -319,6 +351,7 @@ pipeline {
         
         failure {
             echo "Pipeline failed for SCAN_ID: ${params.SCAN_ID}"
+            echo "Failure reason will be sent to backend in callback"
         }
     }
 }

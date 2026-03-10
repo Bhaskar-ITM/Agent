@@ -33,6 +33,11 @@ class ScanDB(Base):
     jenkins_queue_id = Column(String, nullable=True)
     stage_results = Column(JSON, default=list)
     callback_digests = Column(JSON, default=list)
+    # New fields for Phase 1 & 2
+    error_message = Column(String, nullable=True)  # Store error details
+    error_type = Column(String, nullable=True)  # e.g., "PIPELINE_ERROR", "SECURITY_ISSUE"
+    jenkins_console_url = Column(String, nullable=True)  # Direct link to Jenkins logs
+    retry_count = Column(String, default="0", nullable=False)  # Number of retries
 
 class UserDB(Base):
     __tablename__ = "users"

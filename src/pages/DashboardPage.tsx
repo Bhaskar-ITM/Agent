@@ -1,43 +1,95 @@
 import { useState, useMemo, memo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Project } from '../types';
-import { Plus, Search, Activity, X } from 'lucide-react';
+import { Plus, Search, Activity, X, Trash2, AlertCircle } from 'lucide-react';
 import { useDebounce } from '../hooks/useDebounce';
 
 /**
  * Memoized ProjectRow to prevent re-rendering when the search term changes
  * but the project data remains identical.
  */
-const ProjectRow = memo(({ project }: { project: Project }) => (
-  <tr className="hover:bg-slate-50 transition-colors">
-    <td className="px-6 py-4">
-      <div className="font-medium text-slate-900">{project.name}</div>
-      <div className="text-xs text-slate-500">ID: {project.project_id}</div>
-    </td>
-    <td className="px-6 py-4">
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${project.last_scan_state === 'COMPLETED' ? 'bg-green-500' :
-            project.last_scan_state === 'FAILED' ? 'bg-red-500' :
-              project.last_scan_state === 'RUNNING' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
-          }`} />
-        <span className="text-sm font-medium text-slate-700">
-          {project.last_scan_state || 'No scans yet'}
-        </span>
-      </div>
-    </td>
-    <td className="px-6 py-4">
-      <Link
-        to={`/projects/${project.project_id}`}
-        className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
-      >
-        <Activity className="w-4 h-4" />
-        Manage
-      </Link>
-    </td>
-  </tr>
-));
+const ProjectRow = memo(({ project }: { project: Project }) => {
+  const queryClient = useQueryClient();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: () => api.projects.delete(project.project_id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setShowDeleteConfirm(false);
+    },
+    onError: (error) => {
+      console.error('Failed to delete project:', error);
+    }
+  });
+
+  const handleDelete = () => {
+    deleteProjectMutation.mutate();
+  };
+
+  return (
+    <tr className="hover:bg-slate-50 transition-colors">
+      <td className="px-6 py-4">
+        <div className="font-medium text-slate-900">{project.name}</div>
+        <div className="text-xs text-slate-500">ID: {project.project_id}</div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${project.last_scan_state === 'COMPLETED' ? 'bg-green-500' :
+              project.last_scan_state === 'FAILED' ? 'bg-red-500' :
+                project.last_scan_state === 'RUNNING' ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
+            }`} />
+          <span className="text-sm font-medium text-slate-700">
+            {project.last_scan_state || 'No scans yet'}
+          </span>
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/projects/${project.project_id}`}
+            className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+          >
+            <Activity className="w-4 h-4" />
+            Manage
+          </Link>
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-red-600 hover:text-red-800 text-sm font-medium flex items-center gap-1"
+              title="Delete project"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-red-600 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                Confirm?
+              </span>
+              <button
+                onClick={handleDelete}
+                disabled={deleteProjectMutation.isPending}
+                className="text-red-700 hover:text-red-900 font-medium disabled:opacity-50"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="text-slate-600 hover:text-slate-800 font-medium"
+              >
+                No
+              </button>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 ProjectRow.displayName = 'ProjectRow';
 

@@ -34,21 +34,23 @@ def trigger_jenkins_scan_async(self, scan_id: str, scan_mode: str, selected_stag
         if not accepted:
             scan_obj.state = ScanState.FAILED
             scan_obj.finished_at = datetime.utcnow()
+            scan_obj.error_message = "Failed to trigger Jenkins pipeline"
+            scan_obj.error_type = "PIPELINE_ERROR"
             # FIX: Also update project's last_scan_state when Jenkins trigger fails
             project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
             if project_obj:
                 project_obj.last_scan_state = ScanState.FAILED.value
                 logger.info(f"Updated project {project_obj.project_id} last_scan_state to FAILED")
         else:
-            scan_obj.state = ScanState.RUNNING
-            scan_obj.started_at = datetime.utcnow()
+            # Scan is already in RUNNING state from API (optimistic update)
+            # Just update the queue_id if available (started_at is already set)
             if queue_id is not None:
                 scan_obj.jenkins_queue_id = str(queue_id)
-            
+
             # Log the timeout that was sent to Jenkins
             scan_timeout = project_data.get('scan_timeout', 7200)
             logger.info(f"Scan {scan_id} started with timeout: {scan_timeout} seconds ({scan_timeout/60:.1f} minutes)")
-            
+
         db.commit()
     finally:
         db.close()

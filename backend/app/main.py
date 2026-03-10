@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
 from app.api import projects, scans, auth
+from app.websockets import router as websocket_router
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.db import engine, Base
@@ -23,7 +24,8 @@ PUBLIC_ENDPOINTS = [
     "/",
     "/docs",
     "/redoc",
-    "/openapi.json"
+    "/openapi.json",
+    "/api/v1/ws"
 ]
 
 def public_endpoint_only(request):
@@ -59,12 +61,15 @@ def validate_configuration():
         raise RuntimeError("STORAGE_PATH is required")
 
     Path(settings.STORAGE_PATH).mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize DB schema
     Base.metadata.create_all(bind=engine)
 
 # Auth routes are public - no authentication required
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+
+# WebSocket routes
+app.include_router(websocket_router, prefix="/api/v1/ws", tags=["websocket"])
 
 # Protected routes - require authentication
 protected_deps = [Depends(get_current_user)]

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../services/api';
-import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X, Copy, Check } from 'lucide-react';
+import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X, Copy, Check, History } from 'lucide-react';
 
 const ProjectControlPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -178,6 +178,19 @@ const ProjectControlPage = () => {
             >
               <Settings2 className="w-4 h-4" aria-hidden="true" />
               Configure
+            </Link>
+          </div>
+
+          {/* Scan History Link */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h3 className="text-lg font-bold mb-2 text-slate-900">Scan History</h3>
+            <p className="text-slate-500 text-sm mb-6">View all previous scans and their results.</p>
+            <Link
+              to={`/projects/${project.project_id}/history`}
+              className="w-full bg-slate-100 text-slate-700 hover:bg-slate-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 border border-slate-300"
+            >
+              <History className="w-4 h-4" aria-hidden="true" />
+              View History
             </Link>
           </div>
         </div>

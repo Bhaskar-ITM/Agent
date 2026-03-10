@@ -44,3 +44,13 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
     return dict(db_project.__dict__)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: str, db: Session = Depends(get_db)):
+    db_project = db.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    db.delete(db_project)
+    db.commit()
+    return {"detail": "Project deleted successfully"}

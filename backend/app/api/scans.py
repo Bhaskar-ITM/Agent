@@ -10,12 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
-from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse
+from app.schemas.scan import ScanCreate, ScanResponse, ScanResultsResponse, ScanCancelResponse, ScanHistoryResponse, ScanError
 from app.services.jenkins_service import jenkins_service
 from app.services.validation import VALID_STAGES, validate_scan_request
 from app.state.scan_state import ScanState
 from app.core.db import get_db
 from app.models.db_models import ScanDB, ProjectDB
+from app.websockets.manager import manager as websocket_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -152,6 +153,8 @@ def _expire_scan_if_timed_out(db: Session, scan_obj: ScanDB, project_obj: Projec
     if now - reference_time > timedelta(seconds=settings.SCAN_TIMEOUT):
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
+        scan_obj.error_message = f"Scan timed out after {settings.SCAN_TIMEOUT} seconds"
+        scan_obj.error_type = "TIMEOUT"
         project_obj.last_scan_state = scan_obj.state.value
 
         db.commit()
@@ -161,6 +164,14 @@ def _expire_scan_if_timed_out(db: Session, scan_obj: ScanDB, project_obj: Projec
 
 
 def _scan_to_response(scan_obj: ScanDB) -> dict:
+    error = None
+    if scan_obj.error_message:
+        error = {
+            "message": scan_obj.error_message,
+            "error_type": scan_obj.error_type,
+            "jenkins_console_url": scan_obj.jenkins_console_url
+        }
+    
     return {
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
@@ -171,6 +182,8 @@ def _scan_to_response(scan_obj: ScanDB) -> dict:
         "started_at": scan_obj.started_at,
         "finished_at": scan_obj.finished_at,
         "results": scan_obj.stage_results,
+        "error": error,
+        "retry_count": int(scan_obj.retry_count or 0),
     }
 
 @router.get("/scans", response_model=List[ScanResponse])
@@ -218,13 +231,17 @@ def trigger_scan(request: Request, scan: ScanCreate, db: Session = Depends(get_d
         except ValueError:
             logger.warning(f"Invalid X-Scan-Timeout header value ({x_scan_timeout}), using calculated timeout")
     
+    # Optimistic update: Set state to RUNNING immediately to avoid race condition
+    # where client queries status before Celery task updates from QUEUED to RUNNING.
+    # If Jenkins trigger fails, the Celery task will update state to FAILED.
     scan_obj = ScanDB(
         scan_id=scan_id,
         project_id=scan.project_id,
         scan_mode=scan.scan_mode,
         selected_stages=scan.selected_stages or [],
-        state=ScanState.QUEUED,
+        state=ScanState.RUNNING,
         created_at=datetime.utcnow(),
+        started_at=datetime.utcnow(),
         jenkins_build_number=None,
         jenkins_queue_id=None,
         stage_results=[],
@@ -320,7 +337,7 @@ def scan_callback(
     project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
     if project_obj:
         _expire_scan_if_timed_out(db, scan_obj, project_obj)
-    
+
     db.refresh(scan_obj)
 
     callback_digest = _json_digest(report)
@@ -349,6 +366,20 @@ def scan_callback(
         scan_obj.state = ScanState.COMPLETED
     elif jenkins_status in {"FAILURE", "ABORTED", "UNSTABLE"}:
         scan_obj.state = ScanState.FAILED
+        
+        # Store error details from Jenkins callback (Phase 3 enhancement)
+        error_message = report.get("error_message")
+        error_type = report.get("error_type")
+        jenkins_console_url = report.get("jenkins_console_url")
+        
+        if error_message:
+            scan_obj.error_message = error_message
+        if error_type:
+            scan_obj.error_type = error_type
+        if jenkins_console_url:
+            scan_obj.jenkins_console_url = jenkins_console_url
+            
+        logger.info(f"Scan {scan_id} failed with error type: {error_type}, message: {error_message}")
     else:
         raise HTTPException(status_code=400, detail="Invalid callback status")
 
@@ -381,3 +412,165 @@ def scan_callback(
     db.commit()
 
     return {"status": "success"}
+
+
+@router.post("/scans/{scan_id}/reset", response_model=ScanResponse)
+@limiter.limit("10/minute")
+def reset_scan(
+    scan_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Reset a stuck or failed scan to allow re-running.
+    
+    This endpoint:
+    - Resets scan state to NONE
+    - Updates project's last_scan_state to NONE
+    - Clears error messages
+    - Allows new scan to be triggered
+    """
+    # Verify authentication
+    if not x_api_key or x_api_key != settings.API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # Find scan
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    # Find project
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if not project_obj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Reset scan state
+    scan_obj.state = ScanState.CREATED
+    scan_obj.started_at = None
+    scan_obj.finished_at = None
+    scan_obj.error_message = None
+    scan_obj.error_type = None
+    scan_obj.jenkins_console_url = None
+    scan_obj.stage_results = []
+    scan_obj.callback_digests = []
+    
+    # Reset project state
+    project_obj.last_scan_state = ScanState.CREATED.value
+    
+    db.commit()
+    db.refresh(scan_obj)
+    
+    logger.info(f"Scan {scan_id} reset successfully by API key {x_api_key[:8]}...")
+    
+    return _scan_to_response(scan_obj)
+
+
+@router.post("/scans/{scan_id}/cancel", response_model=ScanCancelResponse)
+@limiter.limit("10/minute")
+def cancel_scan(
+    scan_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Cancel a running scan.
+    
+    This endpoint:
+    - Marks scan as CANCELLED
+    - Updates project's last_scan_state
+    - Note: Does NOT cancel Jenkins job (would need Jenkins integration)
+    """
+    # Verify authentication
+    if not x_api_key or x_api_key != settings.API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # Find scan
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    # Check if scan can be cancelled
+    if scan_obj.state in TERMINAL_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel scan in {scan_obj.state.value} state"
+        )
+    
+    # Cancel scan
+    scan_obj.state = ScanState.CANCELLED
+    scan_obj.finished_at = datetime.utcnow()
+    scan_obj.error_message = "Cancelled by user"
+    scan_obj.error_type = "USER_CANCELLED"
+    
+    # Update project state
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if project_obj:
+        project_obj.last_scan_state = ScanState.CANCELLED.value
+    
+    db.commit()
+    
+    logger.info(f"Scan {scan_id} cancelled by API key {x_api_key[:8]}...")
+    
+    return ScanCancelResponse(
+        status="success",
+        message=f"Scan {scan_id} cancelled successfully",
+        scan_id=scan_id
+    )
+
+
+@router.get("/projects/{project_id}/scans", response_model=List[ScanHistoryResponse])
+@limiter.limit("30/minute")
+def get_project_scan_history(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    limit: int = 20,
+    offset: int = 0,
+):
+    """
+    Get scan history for a project.
+    
+    Returns list of all scans for the project with:
+    - Scan ID and state
+    - Timestamps
+    - Error details (if failed)
+    - Retry count
+    """
+    # Verify authentication
+    if not x_api_key or x_api_key != settings.API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # Verify project exists
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
+    if not project_obj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get scans ordered by created_at descending (newest first)
+    scans = db.query(ScanDB).filter(
+        ScanDB.project_id == project_id
+    ).order_by(ScanDB.created_at.desc()).offset(offset).limit(limit).all()
+    
+    # Convert to response format
+    history = []
+    for scan_obj in scans:
+        error = None
+        if scan_obj.error_message:
+            error = ScanError(
+                message=scan_obj.error_message,
+                error_type=scan_obj.error_type,
+                jenkins_console_url=scan_obj.jenkins_console_url
+            )
+        
+        history.append(ScanHistoryResponse(
+            scan_id=scan_obj.scan_id,
+            state=scan_obj.state,
+            created_at=scan_obj.created_at,
+            finished_at=scan_obj.finished_at,
+            retry_count=int(scan_obj.retry_count or 0),
+            error=error
+        ))
+    
+    return history

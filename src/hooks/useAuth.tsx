@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode, FC } from 'react';
 
 interface AuthContextType {
@@ -22,11 +22,12 @@ export const useAuth = (): AuthContextType => {
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [isLoading] = useState<boolean>(() => {
-    // Check if we're still initializing (token check happens synchronously)
-    const storedToken = localStorage.getItem('token');
-    return storedToken === null;
-  });
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Set isLoading to false after initial auth check (which is synchronous)
+  useEffect(() => {
+    setIsLoading(false);
+  }, []);
 
   const login = (newToken: string) => {
     localStorage.setItem('token', newToken);
