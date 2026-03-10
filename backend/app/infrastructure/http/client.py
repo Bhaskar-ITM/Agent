@@ -53,7 +53,8 @@ class HttpClient:
                 logger.info(f"[HTTP] Sending Jenkins POST request to {url}")
                 logger.info(f"[HTTP] Query params: {params}")
                 
-                response = requests.request(
+                # Performance Optimization (Bolt ⚡): Use self.session.request for connection pooling
+                response = self.session.request(
                     method=method,
                     url=url,
                     params=params,  # Jenkins expects params in query string
@@ -64,7 +65,8 @@ class HttpClient:
                 logger.info(f"[HTTP] Jenkins response status: {response.status_code}")
             elif is_jenkins_request and method == "GET":
                 # GET requests with params
-                response = requests.request(
+                # Performance Optimization (Bolt ⚡): Use self.session.request for connection pooling
+                response = self.session.request(
                     method=method,
                     url=url,
                     params=params,
@@ -74,7 +76,8 @@ class HttpClient:
             else:
                 # For all other requests, use JSON
                 logger.info(f"[HTTP] Sending request to {url} with params: {params}, json: {data}")
-                response = requests.request(
+                # Performance Optimization (Bolt ⚡): Use self.session.request for connection pooling
+                response = self.session.request(
                     method=method,
                     url=url,
                     json=data,
