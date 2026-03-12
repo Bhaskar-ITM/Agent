@@ -286,22 +286,28 @@ pipeline {
         always {
             script {
                 archiveArtifacts artifacts: "${env.REPORT_DIR}/**", allowEmptyArchive: true
-                
+
                 // Build detailed error information for failed scans
                 def errorMessage = null
                 def errorType = null
                 def jenkinsConsoleUrl = null
-                
+
                 if (currentBuild.currentResult == 'FAILURE' || currentBuild.currentResult == 'ABORTED') {
-                    // Get the cause of failure
+                    // Get the cause of failure - use wrappedBuild for sandbox compatibility
                     def failedStage = null
-                    for (stage in currentBuild.executions) {
-                        if (stage.status == 'FAILURE' || stage.status == 'ABORTED') {
-                            failedStage = stage
-                            break
+                    def buildWrapper = currentBuild.rawBuild
+                    if (buildWrapper) {
+                        def executions = buildWrapper.getExecution()
+                        if (executions) {
+                            for (stage in executions) {
+                                if (stage.status == 'FAILURE' || stage.status == 'ABORTED') {
+                                    failedStage = stage
+                                    break
+                                }
+                            }
                         }
                     }
-                    
+
                     // Determine error type based on failure
                     if (currentBuild.buildCauses?.any { it.shortDescription?.contains('Timeout') }) {
                         errorType = 'TIMEOUT'
@@ -313,11 +319,11 @@ pipeline {
                         errorType = 'PIPELINE_ERROR'
                         errorMessage = "Pipeline failed with status: ${currentBuild.currentResult}. Review build logs for details."
                     }
-                    
-                    // Build Jenkins console URL
-                    jenkinsConsoleUrl = "${env.JENKINS_BASE_URL ?: 'http://localhost:8080'}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/console"
+
+                    // Build Jenkins console URL using local Jenkins server
+                    jenkinsConsoleUrl = "${env.JENKINS_BASE_URL ?: 'http://192.168.1.101:8080'}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/console"
                 }
-                
+
                 def payload = [
                     status: currentBuild.currentResult,
                     build_number: currentBuild.number,
@@ -330,25 +336,25 @@ pipeline {
                     jenkins_console_url: jenkinsConsoleUrl
                 ]
 
-                withCredentials([string(credentialsId: 'callback-token', variable: 'CALLBACK_TOKEN')]) {
-                    writeFile file: 'callback.json', text: groovy.json.JsonOutput.toJson(payload)
-                    
-                    sh '''
-                        curl -sS -X POST \
-                          -H "Content-Type: application/json" \
-                          -H "X-Callback-Token: $CALLBACK_TOKEN" \
-                          --data @callback.json \
-                          "$CALLBACK_URL" \
-                        || echo "Callback failed"
-                    '''
-                }
+                // Write callback payload to file
+                writeFile file: 'callback.json', text: groovy.json.JsonOutput.toJson(payload)
+
+                // Send callback to backend using environment CALLBACK_TOKEN
+                sh """
+                    curl -sS -X POST \
+                      -H "Content-Type: application/json" \
+                      -H "X-Callback-Token: ${CALLBACK_TOKEN}" \
+                      --data @callback.json \
+                      "${CALLBACK_URL}" \
+                    || echo "Callback failed"
+                """
             }
         }
-        
+
         success {
             echo "Pipeline completed successfully for SCAN_ID: ${params.SCAN_ID}"
         }
-        
+
         failure {
             echo "Pipeline failed for SCAN_ID: ${params.SCAN_ID}"
             echo "Failure reason will be sent to backend in callback"
