@@ -21,6 +21,8 @@ pipeline {
         // Use environment variable for backend URL, fallback to localhost:8000 for dev
         CALLBACK_URL = "${env.BACKEND_URL ?: 'http://localhost:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
         REPORT_DIR = "reports"
+        // Get callback token from Jenkins credentials or use default
+        CALLBACK_TOKEN = "${env.CALLBACK_TOKEN ?: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'}"
     }
 
     options {
@@ -102,15 +104,37 @@ pipeline {
                         // Get the SonarQube Scanner tool path
                         def scannerHome = tool 'sonar-scanner'
 
-                        withSonarQubeEnv('sonar-server') {
-                            sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                  -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
-                                  -Dsonar.sources=. \
-                                  -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}
-                            """
+                        try {
+                            // Check if SonarQube token is available
+                            def sonarToken = env.SONAR_TOKEN
+                            def sonarHost = env.SONAR_HOST_URL ?: 'http://192.168.1.101:9000'
+
+                            if (sonarToken && sonarToken.trim()) {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
+                                      -Dsonar.sources=. \
+                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID} \
+                                      -Dsonar.host.url=${sonarHost} \
+                                      -Dsonar.token=${sonarToken}
+                                """
+                                recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
+                            } else {
+                                echo "WARNING: SONAR_TOKEN not configured. Skipping SonarQube analysis."
+                                echo "To enable SonarQube, set SONAR_TOKEN in Jenkins environment or credentials."
+                                recordStage('sonar_scanner', 'WARN', 'SonarQube token not configured - skipped')
+                            }
+                        } catch (Exception e) {
+                            // Log the error but continue if it's authentication related
+                            echo "SonarQube error: ${e.message}"
+                            if (e.message.contains('401 Unauthorized') || e.message.contains('SONAR_TOKEN')) {
+                                echo "WARNING: SonarQube authentication failed. Check SONAR_TOKEN configuration."
+                                echo "Continuing pipeline without SonarQube analysis..."
+                                recordStage('sonar_scanner', 'WARN', 'SonarQube authentication failed - skipped')
+                            } else {
+                                throw e
+                            }
                         }
-                        recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                     }
                 }
             }
@@ -295,19 +319,37 @@ pipeline {
                 if (currentBuild.currentResult == 'FAILURE' || currentBuild.currentResult == 'ABORTED') {
                     // Get the cause of failure - use wrappedBuild for sandbox compatibility
                     def failedStage = null
-                    def buildWrapper = currentBuild.rawBuild
-                    if (buildWrapper) {
-                        def executions = buildWrapper.getExecution()
-                        if (executions) {
-                            for (stage in executions) {
-                                if (stage.status == 'FAILURE' || stage.status == 'ABORTED') {
-                                    failedStage = stage
-                                    break
+                    try {
+                        // Try to get build execution details (may be restricted by script security)
+                        def buildWrapper = currentBuild.rawBuild
+                        if (buildWrapper && buildWrapper.hasProperty('execution')) {
+                            def executions = buildWrapper.execution
+                            if (executions) {
+                                for (stage in executions) {
+                                    if (stage.status == 'FAILURE' || stage.status == 'ABORTED') {
+                                        failedStage = stage
+                                        break
+                                    }
                                 }
                             }
                         }
+                    } catch (SecurityException e) {
+                        // Script security doesn't allow rawBuild, use fallback
+                        echo "Using fallback error handling (script security restricted)"
+                        errorMessage = "Pipeline failed at stage: ${currentBuild.currentResult}"
+                        errorType = 'PIPELINE_ERROR'
+                    } catch (Exception e) {
+                        echo "Error getting build details: ${e.message}"
                     }
-
+                    
+                    // Set default error if not already set
+                    if (!errorMessage) {
+                        errorMessage = "Pipeline execution failed"
+                    }
+                    if (!errorType) {
+                        errorType = 'PIPELINE_ERROR'
+                    }
+                    
                     // Determine error type based on failure
                     if (currentBuild.buildCauses?.any { it.shortDescription?.contains('Timeout') }) {
                         errorType = 'TIMEOUT'
