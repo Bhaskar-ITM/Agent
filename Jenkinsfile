@@ -98,16 +98,38 @@ pipeline {
         stage('2. Sonar Scanner') {
             when { expression { shouldRun('sonar_scanner') } }
             steps {
-                echo "⏭️  Skipping SonarQube Scanner (not configured)"
-                recordStage('sonar_scanner', 'SKIPPED', 'SonarQube not configured')
+                // Per-stage timeout: 15 minutes for Sonar analysis
+                timeout(time: 15, unit: 'MINUTES') {
+                    script {
+                        // Get the SonarQube Scanner tool path
+                        def scannerHome = tool 'sonar-scanner'
+
+                        try {
+                            // Use Jenkins SonarQube server configuration
+                            withSonarQubeEnv('sonar-server') {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
+                                      -Dsonar.sources=. \
+                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}
+                                """
+                            }
+                            recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
+                        } catch (Exception e) {
+                            echo "⚠️  SonarQube failed: ${e.message}"
+                            echo "   Continuing pipeline with other security scans..."
+                            recordStage('sonar_scanner', 'WARN', "SonarQube failed: ${e.message}")
+                        }
+                    }
+                }
             }
         }
 
         stage('3. Sonar Quality Gate') {
             when { expression { shouldRun('sonar_quality_gate') } }
             steps {
-                echo "⏭️  Skipping SonarQube Quality Gate (not configured)"
-                recordStage('sonar_quality_gate', 'SKIPPED', 'SonarQube not configured')
+                echo "⏭️  Skipping SonarQube Quality Gate check"
+                recordStage('sonar_quality_gate', 'SKIPPED', 'Quality Gate check skipped')
             }
         }
 
