@@ -98,45 +98,16 @@ pipeline {
         stage('2. Sonar Scanner') {
             when { expression { shouldRun('sonar_scanner') } }
             steps {
-                // Per-stage timeout: 15 minutes for Sonar analysis
-                timeout(time: 15, unit: 'MINUTES') {
-                    script {
-                        // Get the SonarQube Scanner tool path
-                        def scannerHome = tool 'sonar-scanner'
-
-                        try {
-                            // Use Jenkins SonarQube server configuration
-                            withSonarQubeEnv('sonar-server') {
-                                sh """
-                                    ${scannerHome}/bin/sonar-scanner \
-                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
-                                      -Dsonar.sources=. \
-                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}
-                                """
-                            }
-                            recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
-                        } catch (Exception e) {
-                            echo "⚠️  SonarQube failed: ${e.message}"
-                            echo "   Continuing pipeline with other security scans..."
-                            recordStage('sonar_scanner', 'WARN', "SonarQube failed: ${e.message}")
-                        }
-                    }
-                }
+                echo "⏭️  Skipping SonarQube Scanner (not configured)"
+                recordStage('sonar_scanner', 'SKIPPED', 'SonarQube not configured')
             }
         }
 
         stage('3. Sonar Quality Gate') {
             when { expression { shouldRun('sonar_quality_gate') } }
             steps {
-                // Per-stage timeout: 30 minutes for quality gate check (allows time for SonarQube analysis)
-                timeout(time: 30, unit: 'MINUTES') {
-                    script {
-                        echo "Waiting for SonarQube Quality Gate..."
-                        def qg = waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
-                        echo "Quality Gate Result: ${qg.status}"
-                    }
-                    recordStage('sonar_quality_gate', 'PASS', 'Quality gate checked')
-                }
+                echo "⏭️  Skipping SonarQube Quality Gate (not configured)"
+                recordStage('sonar_quality_gate', 'SKIPPED', 'SonarQube not configured')
             }
         }
 
