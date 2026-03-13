@@ -14,15 +14,7 @@ router = APIRouter()
 
 @router.post("/register", response_model=User)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    # Check if a user already exists! We strictly enforce SINGLE USER for Phase 0
-    existing_user_count = db.query(UserDB).count()
-    if existing_user_count > 0:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Registration disabled: An admin account already exists."
-        )
-
-    # Check username collision (just in case)
+    # Check username collision
     db_user = db.query(UserDB).filter(UserDB.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")

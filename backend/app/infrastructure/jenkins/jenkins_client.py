@@ -71,3 +71,9 @@ class JenkinsClient:
             method="GET",
             path=f"job/{job_name}/{build_number}/api/json",
         )
+
+    def get_queue_item(self, queue_id: int):
+        return self.client.request(
+            method="GET",
+            path=f"queue/item/{queue_id}/api/json",
+        )

@@ -74,6 +74,10 @@ export const api = {
       const response = await apiClient.post('/projects', project);
       return response.data;
     },
+    update: async (id: string, project: Partial<Omit<Project, 'project_id'>>): Promise<Project> => {
+      const response = await apiClient.patch(`/projects/${id}`, project);
+      return response.data;
+    },
     delete: async (id: string): Promise<void> => {
       await apiClient.delete(`/projects/${id}`);
     },

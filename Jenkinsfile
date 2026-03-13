@@ -104,28 +104,16 @@ pipeline {
                         // Get the SonarQube Scanner tool path
                         def scannerHome = tool 'sonar-scanner'
 
-                        // Check if SonarQube is configured
-                        def sonarToken = env.SONAR_TOKEN
-                        def sonarHost = env.SONAR_HOST_URL ?: 'http://192.168.1.101:9000'
-
-                        if (!sonarToken || !sonarToken.trim()) {
-                            echo "⚠️  SONAR_TOKEN not configured - skipping SonarQube scan"
-                            echo "   To enable: Manage Jenkins → System → Global properties → Add SONAR_TOKEN"
-                            echo "   Get token from: ${sonarHost}/account/security/"
-                            recordStage('sonar_scanner', 'SKIPPED', 'SonarQube not configured')
-                            return
-                        }
-
                         try {
-                            sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                  -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
-                                  -Dsonar.sources=. \
-                                  -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID} \
-                                  -Dsonar.host.url=${sonarHost} \
-                                  -Dsonar.token=${sonarToken} \
-                                  -Dsonar.login=${sonarToken}
-                            """
+                            // Use Jenkins SonarQube server configuration
+                            withSonarQubeEnv('sonar-server') {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
+                                      -Dsonar.sources=. \
+                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}
+                                """
+                            }
                             recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                         } catch (Exception e) {
                             echo "⚠️  SonarQube failed: ${e.message}"

@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Header, HTTPException, status, Depends, Request
+from fastapi import APIRouter, Header, HTTPException, status, Depends, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -240,7 +240,7 @@ def list_scans(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/scans", response_model=ScanResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("1000/minute" if settings.ENV == "test" else "10/minute")
-def trigger_scan(request: Request, scan: ScanCreate, db: Session = Depends(get_db), x_scan_timeout: str | None = Header(default=None, alias="X-Scan-Timeout")):
+def trigger_scan(request: Request, scan: ScanCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), x_scan_timeout: str | None = Header(default=None, alias="X-Scan-Timeout")):
     try:
         validate_scan_request(scan)
     except ValueError as e:
@@ -293,6 +293,14 @@ def trigger_scan(request: Request, scan: ScanCreate, db: Session = Depends(get_d
     project.last_scan_state = scan_obj.state.value
     db.commit()
     db.refresh(scan_obj)
+
+    # Broadcast initial update (Phase 3.1)
+    background_tasks.add_task(
+        websocket_manager.send_scan_update,
+        scan_id=scan_obj.scan_id,
+        project_id=scan_obj.project_id,
+        data=_scan_to_response(scan_obj)
+    )
 
     # Explicitly map project fields to ensure proper serialization
     project_data = {
@@ -367,6 +375,7 @@ def get_scan_overview(scan_id: str, db: Session = Depends(get_db)):
 def scan_callback(
     scan_id: str,
     report: dict,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     x_callback_token: str | None = Header(default=None, alias="X-Callback-Token"),
 ):
@@ -453,6 +462,14 @@ def scan_callback(
     scan_obj.callback_digests = list(current_digests)
     db.commit()
 
+    # Broadcast update to all connected clients (Phase 3.1)
+    background_tasks.add_task(
+        websocket_manager.send_scan_update,
+        scan_id=scan_obj.scan_id,
+        project_id=scan_obj.project_id,
+        data=_scan_to_response(scan_obj)
+    )
+
     return {"status": "success"}
 
 
@@ -461,8 +478,8 @@ def scan_callback(
 def reset_scan(
     scan_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ):
     """
     Reset a stuck or failed scan to allow re-running.
@@ -473,10 +490,6 @@ def reset_scan(
     - Clears error messages
     - Allows new scan to be triggered
     """
-    # Verify authentication
-    if not x_api_key or x_api_key != settings.API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
     # Find scan
     scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
     if not scan_obj:
@@ -489,6 +502,7 @@ def reset_scan(
     
     # Reset scan state
     scan_obj.state = ScanState.CREATED
+    scan_obj.retry_count = str(int(scan_obj.retry_count or 0) + 1)
     scan_obj.started_at = None
     scan_obj.finished_at = None
     scan_obj.error_message = None
@@ -503,7 +517,15 @@ def reset_scan(
     db.commit()
     db.refresh(scan_obj)
     
-    logger.info(f"Scan {scan_id} reset successfully by API key {x_api_key[:8]}...")
+    # Broadcast reset update (Phase 3.1)
+    background_tasks.add_task(
+        websocket_manager.send_scan_update,
+        scan_id=scan_obj.scan_id,
+        project_id=scan_obj.project_id,
+        data=_scan_to_response(scan_obj)
+    )
+    
+    logger.info(f"Scan {scan_id} reset successfully")
     
     return _scan_to_response(scan_obj)
 
@@ -513,8 +535,8 @@ def reset_scan(
 def cancel_scan(
     scan_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ):
     """
     Cancel a running scan.
@@ -524,10 +546,6 @@ def cancel_scan(
     - Updates project's last_scan_state
     - Note: Does NOT cancel Jenkins job (would need Jenkins integration)
     """
-    # Verify authentication
-    if not x_api_key or x_api_key != settings.API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
     # Find scan
     scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
     if not scan_obj:
@@ -553,7 +571,15 @@ def cancel_scan(
     
     db.commit()
     
-    logger.info(f"Scan {scan_id} cancelled by API key {x_api_key[:8]}...")
+    # Broadcast cancellation update (Phase 3.1)
+    background_tasks.add_task(
+        websocket_manager.send_scan_update,
+        scan_id=scan_obj.scan_id,
+        project_id=scan_obj.project_id,
+        data=_scan_to_response(scan_obj)
+    )
+    
+    logger.info(f"Scan {scan_id} cancelled")
     
     return ScanCancelResponse(
         status="success",
@@ -568,7 +594,6 @@ def get_project_scan_history(
     project_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     limit: int = 20,
     offset: int = 0,
 ):
@@ -581,10 +606,6 @@ def get_project_scan_history(
     - Error details (if failed)
     - Retry count
     """
-    # Verify authentication
-    if not x_api_key or x_api_key != settings.API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
     # Verify project exists
     project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
     if not project_obj:

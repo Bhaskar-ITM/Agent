@@ -11,19 +11,20 @@ import RegisterPage from './pages/RegisterPage';
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const CreateProjectPage = lazy(() => import('./pages/CreateProjectPage'));
 const ProjectControlPage = lazy(() => import('./pages/ProjectControlPage'));
+const ProjectEditPage = lazy(() => import('./pages/ProjectEditPage'));
 const ManualScanPage = lazy(() => import('./pages/ManualScanPage'));
 const ScanStatusPage = lazy(() => import('./pages/ScanStatusPage'));
 const ScanHistoryPage = lazy(() => import('./pages/ScanHistoryPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 
 // Loading component for lazy-loaded routes
 const PageLoader = () => (
-  <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-    <div className="bg-white rounded-lg shadow-sm p-8 flex items-center gap-4">
-      <svg className="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-      <span className="text-slate-700">Loading...</span>
+  <div className="flex flex-col items-center justify-center min-h-[60vh]">
+    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-blue-100"></div>
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-slate-900 font-black tracking-tight text-lg">Synchronizing</span>
+      <span className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] animate-pulse">Establishing secure link</span>
     </div>
   </div>
 );
@@ -57,7 +58,7 @@ function App() {
                 }
               />
               <Route
-                path="/projects/:id"
+                path="/projects/:projectId"
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <ProjectControlPage />
@@ -65,7 +66,15 @@ function App() {
                 }
               />
               <Route
-                path="/projects/:id/manual"
+                path="/projects/:projectId/edit"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ProjectEditPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/projects/:projectId/manual"
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <ManualScanPage />
@@ -73,7 +82,7 @@ function App() {
                 }
               />
               <Route
-                path="/scans/:id"
+                path="/scans/:scanId"
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <ScanStatusPage />
@@ -81,10 +90,26 @@ function App() {
                 }
               />
               <Route
-                path="/projects/:id/history"
+                path="/projects/:projectId/history"
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <ScanHistoryPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <SettingsPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <UserManagementPage />
                   </Suspense>
                 }
               />

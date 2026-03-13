@@ -58,8 +58,8 @@ def test_integration_v1(mock_celery_task):
 
     # Assert output matches spec
     assert "scan_id" in data
-    # Scan is created as QUEUED in the database
-    assert data["state"] == "QUEUED"
+    # Scan is created as RUNNING (optimistic update)
+    assert data["state"] == "RUNNING"
 
     scan_id = data["scan_id"]
 
@@ -67,7 +67,7 @@ def test_integration_v1(mock_celery_task):
     response = client.get(f"/api/v1/scans/{scan_id}")
     assert response.status_code == 200
     scan_state = response.json()["state"]
-    assert scan_state == "QUEUED"
+    assert scan_state == "RUNNING"
 
     # 4. Get Results
     response = client.get(f"/api/v1/scans/{scan_id}/results")
