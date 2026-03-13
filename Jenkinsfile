@@ -104,36 +104,33 @@ pipeline {
                         // Get the SonarQube Scanner tool path
                         def scannerHome = tool 'sonar-scanner'
 
-                        try {
-                            // Check if SonarQube token is available
-                            def sonarToken = env.SONAR_TOKEN
-                            def sonarHost = env.SONAR_HOST_URL ?: 'http://192.168.1.101:9000'
+                        // Check if SonarQube is configured
+                        def sonarToken = env.SONAR_TOKEN
+                        def sonarHost = env.SONAR_HOST_URL ?: 'http://192.168.1.101:9000'
 
-                            if (sonarToken && sonarToken.trim()) {
-                                sh """
-                                    ${scannerHome}/bin/sonar-scanner \
-                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
-                                      -Dsonar.sources=. \
-                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID} \
-                                      -Dsonar.host.url=${sonarHost} \
-                                      -Dsonar.token=${sonarToken}
-                                """
-                                recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
-                            } else {
-                                echo "WARNING: SONAR_TOKEN not configured. Skipping SonarQube analysis."
-                                echo "To enable SonarQube, set SONAR_TOKEN in Jenkins environment or credentials."
-                                recordStage('sonar_scanner', 'WARN', 'SonarQube token not configured - skipped')
-                            }
+                        if (!sonarToken || !sonarToken.trim()) {
+                            echo "⚠️  SONAR_TOKEN not configured - skipping SonarQube scan"
+                            echo "   To enable: Manage Jenkins → System → Global properties → Add SONAR_TOKEN"
+                            echo "   Get token from: ${sonarHost}/account/security/"
+                            recordStage('sonar_scanner', 'SKIPPED', 'SonarQube not configured')
+                            return
+                        }
+
+                        try {
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                  -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID} \
+                                  -Dsonar.host.url=${sonarHost} \
+                                  -Dsonar.token=${sonarToken} \
+                                  -Dsonar.login=${sonarToken}
+                            """
+                            recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                         } catch (Exception e) {
-                            // Log the error but continue if it's authentication related
-                            echo "SonarQube error: ${e.message}"
-                            if (e.message.contains('401 Unauthorized') || e.message.contains('SONAR_TOKEN')) {
-                                echo "WARNING: SonarQube authentication failed. Check SONAR_TOKEN configuration."
-                                echo "Continuing pipeline without SonarQube analysis..."
-                                recordStage('sonar_scanner', 'WARN', 'SonarQube authentication failed - skipped')
-                            } else {
-                                throw e
-                            }
+                            echo "⚠️  SonarQube failed: ${e.message}"
+                            echo "   Continuing pipeline with other security scans..."
+                            recordStage('sonar_scanner', 'WARN', "SonarQube failed: ${e.message}")
                         }
                     }
                 }
