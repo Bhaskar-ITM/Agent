@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, RefreshCw, AlertCircle, CheckCircle, Clock, ExternalLink, Shield, Activity, Calendar, User, Zap, Lock, ChevronDown, ChevronUp, X, AlertTriangle, Terminal, Search, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { api } from '../services/api';
 import { useScanReset, useScanCancel } from '../hooks/useScanReset';
@@ -15,6 +15,7 @@ const ScanStatusPage = () => {
   const { scanId } = useParams();
   const navigate = useNavigate();
   const { addToast } = useToast();
+  const queryClient = useQueryClient();
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -23,6 +24,20 @@ const ScanStatusPage = () => {
   const toggleStage = (stageId: string) => {
     setExpandedStages(prev => ({ ...prev, [stageId]: !prev[stageId] }));
   };
+
+  // Track last updated time for display
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const { connected: wsConnected, connecting: wsConnecting } = useScanWebSocket(scanId, undefined, {
+    onMessage: (message) => {
+      console.log('Scan real-time update received:', message);
+      // Performance Optimization (Bolt ⚡): Surgical cache update avoids redundant HTTP refetch
+      queryClient.setQueryData(['scan', scanId], {
+        scan: message.data,
+        stages: message.data.results || []
+      });
+    }
+  });
 
   const { data: scanData, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['scan', scanId],
@@ -36,7 +51,8 @@ const ScanStatusPage = () => {
       if (data?.scan && ['COMPLETED', 'FAILED', 'CANCELLED'].includes(data.scan.state)) {
         return false;
       }
-      return 3000;
+      // Performance Optimization (Bolt ⚡): Reduce polling frequency when WebSocket is healthy
+      return wsConnected ? 15000 : 3000;
     },
     enabled: !!scanId,
   });
@@ -53,16 +69,6 @@ const ScanStatusPage = () => {
   const resetMutation = useScanReset();
   const cancelMutation = useScanCancel();
 
-  // Track last updated time for display
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-
-  const { connected: wsConnected, connecting: wsConnecting } = useScanWebSocket(scanId, undefined, {
-    onMessage: (message) => {
-      console.log('Scan real-time update received:', message);
-      refetch();
-      setLastUpdated(new Date());
-    }
-  });
 
   // Update lastUpdated on successful refetch
   useEffect(() => {

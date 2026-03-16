@@ -150,11 +150,18 @@ const DashboardPage = () => {
   }, []);
 
   // WebSocket for real-time dashboard updates (Phase 3.1)
-  useScanWebSocket(undefined, undefined, {
+  const { connected: wsConnected } = useScanWebSocket(undefined, undefined, {
     onMessage: (message) => {
       console.log('Dashboard real-time update received:', message);
-      // Invalidate projects query to fetch latest states
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      // Performance Optimization (Bolt ⚡): Surgical cache update avoids heavy invalidation and preserves object references
+      queryClient.setQueryData(['projects'], (oldProjects: Project[] | undefined) => {
+        if (!oldProjects) return oldProjects;
+        return oldProjects.map(p =>
+          p.project_id === message.project_id
+            ? { ...p, last_scan_state: message.data.state, last_scan_id: message.data.scan_id }
+            : p
+        );
+      });
     },
     onOpen: () => {
       console.log('Dashboard WebSocket connected');
@@ -164,7 +171,8 @@ const DashboardPage = () => {
   const { data: projects = [], isLoading: loading } = useQuery({
     queryKey: ['projects'],
     queryFn: api.projects.list,
-    refetchInterval: 10000,
+    // Performance Optimization (Bolt ⚡): Reduce polling frequency when WebSocket is healthy
+    refetchInterval: wsConnected ? 60000 : 10000,
   });
 
   // Performance: Debounce search input to avoid re-filtering and re-renders on every keystroke
