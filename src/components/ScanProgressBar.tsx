@@ -177,14 +177,23 @@ export function ScanProgressBar({
       <div className="relative mb-10">
         <div className="flex items-center justify-between mb-3">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Deployment Readiness</span>
-          <span className={`text-sm font-black tracking-tighter ${
-            isFailed ? 'text-red-600' : isComplete ? 'text-green-600' : 'text-blue-600'
-          }`}>
+          <span
+            className={`text-sm font-black tracking-tighter ${
+              isFailed ? 'text-red-600' : isComplete ? 'text-green-600' : 'text-blue-600'
+            }`}
+            aria-live="polite"
+          >
             {percentage}%
           </span>
         </div>
         <div className="w-full bg-slate-100 rounded-full h-4 p-1 border border-slate-200 shadow-inner">
           <div
+            role="progressbar"
+            aria-valuenow={percentage}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Scan execution progress"
+            aria-valuetext={`${percentage}% - ${completed} of ${relevantStages.length} stages completed`}
             className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${
               isFailed ? 'bg-red-500 shadow-lg shadow-red-200' : 
               isComplete ? 'bg-green-500 shadow-lg shadow-green-200' : 

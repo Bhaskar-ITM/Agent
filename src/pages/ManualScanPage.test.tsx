@@ -22,20 +22,7 @@ vi.mock('../services/api', () => ({
     scans: {
       trigger: vi.fn(),
     }
-  },
-  FIXED_STAGES: [
-    'Git Checkout',
-    'Sonar Scanner',
-    'Sonar Quality Gate',
-    'NPM / PIP Install',
-    'Dependency Check',
-    'Trivy FS Scan',
-    'Docker Build',
-    'Docker Push',
-    'Trivy Image Scan',
-    'Nmap Scan',
-    'ZAP Scan'
-  ]
+  }
 }));
 
 describe('ManualScanPage', () => {
@@ -61,7 +48,7 @@ describe('ManualScanPage', () => {
         <AuthProvider>
           <MemoryRouter initialEntries={['/projects/1/manual']}>
             <Routes>
-              <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+              <Route path="/projects/:projectId/manual" element={<ManualScanPage />} />
             </Routes>
           </MemoryRouter>
         </AuthProvider>
@@ -79,7 +66,7 @@ describe('ManualScanPage', () => {
         <AuthProvider>
           <MemoryRouter initialEntries={['/projects/1/manual']}>
             <Routes>
-              <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+              <Route path="/projects/:projectId/manual" element={<ManualScanPage />} />
             </Routes>
           </MemoryRouter>
         </AuthProvider>
@@ -93,12 +80,12 @@ describe('ManualScanPage', () => {
 
     // Select Nmap Scan
     fireEvent.click(screen.getByText('Nmap Scan'));
-    expect(screen.getByText('Additional Configuration Status')).toBeInTheDocument();
-    expect(screen.getByText('Target IP (for Nmap)')).toBeInTheDocument();
+    expect(screen.getByText(/Cluster Intelligence/i)).toBeInTheDocument();
+    expect(screen.getByText(/Network Target/i)).toBeInTheDocument();
 
     // Select ZAP Scan
     fireEvent.click(screen.getByText('ZAP Scan'));
-    expect(screen.getByText('Target URL (for ZAP)')).toBeInTheDocument();
+    expect(screen.getByText(/Live Endpoint/i)).toBeInTheDocument();
   });
 
   it('toggles all stages when Select All / Deselect All is clicked', async () => {
@@ -107,7 +94,7 @@ describe('ManualScanPage', () => {
         <AuthProvider>
           <MemoryRouter initialEntries={['/projects/1/manual']}>
             <Routes>
-              <Route path="/projects/:id/manual" element={<ManualScanPage />} />
+              <Route path="/projects/:projectId/manual" element={<ManualScanPage />} />
             </Routes>
           </MemoryRouter>
         </AuthProvider>

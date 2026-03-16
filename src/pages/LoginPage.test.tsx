@@ -40,7 +40,7 @@ describe('LoginPage', () => {
       </AuthProvider>
     );
 
-    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/operator identity/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /authorize entry/i })).toBeInTheDocument();
   });
 });

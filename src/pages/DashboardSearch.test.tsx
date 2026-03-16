@@ -101,7 +101,7 @@ describe('DashboardPage Search', () => {
     });
 
     expect(screen.queryByText('Alpha Project')).not.toBeInTheDocument();
-    expect(screen.getByText(/No projects matching "Zeta"/)).toBeInTheDocument();
+    expect(screen.getByText(/Try adjusting your search terms for "Zeta"/)).toBeInTheDocument();
   });
 
   it('clears search when "Clear search" button is clicked', async () => {

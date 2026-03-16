@@ -162,7 +162,7 @@ const ManualScanPage = () => {
                 Modular Stage Allocation
               </h3>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedStages.length} Stages Armed</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedStages.length} Stages Selected</span>
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
               </div>
             </div>
@@ -176,9 +176,10 @@ const ManualScanPage = () => {
                 <button
                   type="button"
                   onClick={handleToggleAll}
+                  aria-label={selectedStages.length === FIXED_STAGES.length ? 'Deselect all stages' : 'Select all stages'}
                   className="px-6 py-2.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200"
                 >
-                  {selectedStages.length === FIXED_STAGES.length ? 'Deselect All' : 'Arm All Stages'}
+                  {selectedStages.length === FIXED_STAGES.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
 
