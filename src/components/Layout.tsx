@@ -34,6 +34,11 @@ const Layout = () => {
 
   const currentProject = projectData ? { id: projectData.project_id, name: projectData.name } : undefined;
 
+  // Close mobile menu on any navigation
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
