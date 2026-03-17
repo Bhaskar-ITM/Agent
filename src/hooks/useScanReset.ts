@@ -46,7 +46,3 @@ export function useScanCancel() {
     },
   });
 }
-
-export function useScanHistory(projectId: string) {
-  return api.scans.getHistory(projectId);
-}
