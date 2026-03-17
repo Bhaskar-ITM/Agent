@@ -16,7 +16,7 @@ from app.services.jenkins_service import jenkins_service
 from app.services.validation import VALID_STAGES, validate_scan_request
 from app.state.scan_state import ScanState
 from app.core.db import get_db
-from app.models.db_models import ScanDB, ProjectDB
+from app.models.db_models import ScanDB, ProjectDB, MAX_RETRY_COUNT
 from app.websockets.manager import manager as websocket_manager
 
 router = APIRouter()
@@ -187,7 +187,7 @@ def _scan_to_response(scan_obj: ScanDB) -> dict:
             "error_type": scan_obj.error_type,
             "jenkins_console_url": scan_obj.jenkins_console_url
         }
-    
+
     return {
         "scan_id": scan_obj.scan_id,
         "project_id": scan_obj.project_id,
@@ -199,7 +199,7 @@ def _scan_to_response(scan_obj: ScanDB) -> dict:
         "finished_at": scan_obj.finished_at,
         "results": scan_obj.stage_results,
         "error": error,
-        "retry_count": int(scan_obj.retry_count or 0),
+        "retry_count": scan_obj.retry_count or 0,
     }
 
 @router.get("/scans", response_model=List[ScanResponse])
@@ -501,26 +501,35 @@ def reset_scan(
 ):
     """
     Reset a stuck or failed scan to allow re-running.
-    
+
     This endpoint:
-    - Resets scan state to NONE
-    - Updates project's last_scan_state to NONE
+    - Resets scan state to CREATED
+    - Updates project's last_scan_state to CREATED
     - Clears error messages
+    - Increments retry_count (max MAX_RETRY_COUNT)
     - Allows new scan to be triggered
     """
     # Find scan
     scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
     if not scan_obj:
         raise HTTPException(status_code=404, detail="Scan not found")
-    
+
     # Find project
     project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
     if not project_obj:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
+    # Check retry limit
+    current_retry_count = scan_obj.retry_count or 0
+    if current_retry_count >= MAX_RETRY_COUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum retry count ({MAX_RETRY_COUNT}) reached. Cannot reset scan."
+        )
+
     # Reset scan state
     scan_obj.state = ScanState.CREATED
-    scan_obj.retry_count = str(int(scan_obj.retry_count or 0) + 1)
+    scan_obj.retry_count = current_retry_count + 1
     scan_obj.started_at = None
     scan_obj.finished_at = None
     scan_obj.error_message = None
@@ -528,13 +537,13 @@ def reset_scan(
     scan_obj.jenkins_console_url = None
     scan_obj.stage_results = []
     scan_obj.callback_digests = []
-    
+
     # Reset project state
     project_obj.last_scan_state = ScanState.CREATED.value
-    
+
     db.commit()
     db.refresh(scan_obj)
-    
+
     # Broadcast reset update (Phase 3.1)
     background_tasks.add_task(
         websocket_manager.send_scan_update,
@@ -542,9 +551,9 @@ def reset_scan(
         project_id=scan_obj.project_id,
         data=_scan_to_response(scan_obj)
     )
-    
-    logger.info(f"Scan {scan_id} reset successfully")
-    
+
+    logger.info(f"Scan {scan_id} reset successfully (retry count: {scan_obj.retry_count}/{MAX_RETRY_COUNT})")
+
     return _scan_to_response(scan_obj)
 
 

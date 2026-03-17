@@ -1,8 +1,11 @@
 import enum
-from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum, JSON, Index
+from datetime import datetime, timezone
+from sqlalchemy import Column, String, DateTime, Enum, JSON, Index, Integer
 from app.core.db import Base
 from app.state.scan_state import ScanState
+
+# Maximum retry count to prevent infinite retry loops
+MAX_RETRY_COUNT = 10
 
 class ProjectDB(Base):
     __tablename__ = "projects"
@@ -37,7 +40,7 @@ class ScanDB(Base):
     error_message = Column(String, nullable=True)  # Store error details
     error_type = Column(String, nullable=True)  # e.g., "PIPELINE_ERROR", "SECURITY_ISSUE"
     jenkins_console_url = Column(String, nullable=True)  # Direct link to Jenkins logs
-    retry_count = Column(String, default="0", nullable=False)  # Number of retries
+    retry_count = Column(Integer, default=0, nullable=False)  # Number of retries
     
     # Index for faster active scan lookups
     __table_args__ = (
