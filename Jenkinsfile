@@ -138,33 +138,33 @@ pipeline {
             steps {
                 // Per-stage timeout: 10 minutes for dependency installation
                 timeout(time: 10, unit: 'MINUTES') {
-                    sh """
-                        # Install Frontend dependencies
-                        if [ -f Port_Push-main/frontend/package.json ]; then
-                            cd Port_Push-main/frontend
-                            npm install
-                            cd ../..
-                        elif [ -f package.json ]; then
-                            npm install
-                        fi
-
-                        # Install Backend dependencies
-                        if [ -f Port_Push-main/backend/requirements.txt ]; then
-                            cd Port_Push-main/backend
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -r requirements.txt
-                            cd ../..
-                        elif [ -f backend/requirements.txt ]; then
-                            cd backend
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -r requirements.txt
-                            cd ..
-                        fi
-                    """
-                    recordStage('npm_pip_install', 'PASS', 'Dependencies installed')
+                    script {
+                        // Find package.json location
+                        def npmDir = sh(
+                            script: "find . -name 'package.json' -type f | head -1",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (npmDir) {
+                            dir(npmDir.replaceAll('/package.json', '')) {
+                                sh 'npm ci'
+                            }
+                        }
+                        
+                        // Find requirements.txt location  
+                        def pipDir = sh(
+                            script: "find . -name 'requirements.txt' -type f | head -1",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (pipDir) {
+                            dir(pipDir.replaceAll('/requirements.txt', '')) {
+                                sh 'pip install -r requirements.txt'
+                            }
+                        }
+                    }
                 }
+                recordStage('npm_pip_install', 'PASS', 'Dependencies installed')
             }
         }
 
