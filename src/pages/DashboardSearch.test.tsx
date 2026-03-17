@@ -78,7 +78,7 @@ describe('DashboardPage Search', () => {
     expect(screen.queryByText('Gamma Project')).not.toBeInTheDocument();
   });
 
-  it('shows "No projects matching" message after debounce', async () => {
+  it('shows "No matches found" message after debounce', async () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
@@ -101,7 +101,8 @@ describe('DashboardPage Search', () => {
     });
 
     expect(screen.queryByText('Alpha Project')).not.toBeInTheDocument();
-    expect(screen.getByText(/No projects matching "Zeta"/)).toBeInTheDocument();
+    expect(screen.getByText('No matches found')).toBeInTheDocument();
+    expect(screen.getByText(/Try adjusting your search terms/)).toBeInTheDocument();
   });
 
   it('clears search when "Clear search" button is clicked', async () => {
