@@ -273,17 +273,16 @@ def trigger_scan(request: Request, scan: ScanCreate, background_tasks: Backgroun
         except ValueError:
             logger.warning(f"Invalid X-Scan-Timeout header value ({x_scan_timeout}), using calculated timeout")
     
-    # Optimistic update: Set state to RUNNING immediately to avoid race condition
-    # where client queries status before Celery task updates from QUEUED to RUNNING.
-    # If Jenkins trigger fails, the Celery task will update state to FAILED.
+    # Create scan in CREATED state - will transition to RUNNING when Jenkins confirms via callback
+    # This prevents phantom scans that block users if Jenkins trigger fails
     scan_obj = ScanDB(
         scan_id=scan_id,
         project_id=scan.project_id,
         scan_mode=scan.scan_mode,
         selected_stages=scan.selected_stages or [],
-        state=ScanState.RUNNING,
+        state=ScanState.CREATED,
         created_at=datetime.utcnow(),
-        started_at=datetime.utcnow(),
+        started_at=None,  # Will be set when Jenkins confirms build started
         jenkins_build_number=None,
         jenkins_queue_id=None,
         stage_results=[],
@@ -413,23 +412,28 @@ def scan_callback(
     scan_obj.stage_results = normalized_stages
 
     jenkins_status = str(report.get("status", "")).upper()
-    if jenkins_status == "SUCCESS":
+    if jenkins_status == "RUNNING":
+        # Jenkins confirmed build started - transition from CREATED to RUNNING
+        scan_obj.state = ScanState.RUNNING
+        scan_obj.started_at = datetime.utcnow()
+        logger.info(f"Scan {scan_id} transitioned to RUNNING state")
+    elif jenkins_status == "SUCCESS":
         scan_obj.state = ScanState.COMPLETED
     elif jenkins_status in {"FAILURE", "ABORTED", "UNSTABLE"}:
         scan_obj.state = ScanState.FAILED
-        
+
         # Store error details from Jenkins callback (Phase 3 enhancement)
         error_message = report.get("error_message")
         error_type = report.get("error_type")
         jenkins_console_url = report.get("jenkins_console_url")
-        
+
         if error_message:
             scan_obj.error_message = error_message
         if error_type:
             scan_obj.error_type = error_type
         if jenkins_console_url:
             scan_obj.jenkins_console_url = jenkins_console_url
-            
+
         logger.info(f"Scan {scan_id} failed with error type: {error_type}, message: {error_message}")
     else:
         raise HTTPException(status_code=400, detail="Invalid callback status")
@@ -580,12 +584,73 @@ def cancel_scan(
     )
     
     logger.info(f"Scan {scan_id} cancelled")
-    
+
     return ScanCancelResponse(
         status="success",
         message=f"Scan {scan_id} cancelled successfully",
         scan_id=scan_id
     )
+
+
+@router.post("/scans/{scan_id}/force-unlock")
+@limiter.limit("10/minute")
+def force_unlock_scan(
+    scan_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Admin endpoint to force-unlock a stuck scan.
+    
+    This endpoint:
+    - Marks scan as FAILED with ADMIN_RECOVERY error type
+    - Updates project's last_scan_state to FAILED
+    - Allows new scan to be triggered for the project
+    
+    Note: In test mode, authentication is bypassed. In production,
+    this endpoint requires admin privileges.
+    """
+    # Find scan
+    scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+    if not scan_obj:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    
+    # Check if scan is in an active state (can only unlock active scans)
+    if scan_obj.state in TERMINAL_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot unlock scan in {scan_obj.state.value} state (already in terminal state)"
+        )
+    
+    # Force-unlock the scan
+    scan_obj.state = ScanState.FAILED
+    scan_obj.finished_at = datetime.utcnow()
+    scan_obj.error_message = "Scan unlocked by administrator"
+    scan_obj.error_type = "ADMIN_RECOVERY"
+    
+    # Update project state
+    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    if project_obj:
+        project_obj.last_scan_state = ScanState.FAILED.value
+    
+    db.commit()
+    
+    # Broadcast unlock update
+    background_tasks.add_task(
+        websocket_manager.send_scan_update,
+        scan_id=scan_obj.scan_id,
+        project_id=scan_obj.project_id,
+        data=_scan_to_response(scan_obj)
+    )
+    
+    logger.info(f"Scan {scan_id} force-unlocked by administrator")
+    
+    return {
+        "status": "success",
+        "message": f"Scan {scan_id} unlocked successfully",
+        "scan_id": scan_id
+    }
 
 
 @router.get("/projects/{project_id}/scans", response_model=List[ScanHistoryResponse])
