@@ -140,9 +140,9 @@ export default function ScanHistoryPage() {
                   const isRunning = ['RUNNING', 'QUEUED'].includes(scan.state);
 
                   return (
-                    <tr 
+                    <tr
                       key={scan.scan_id}
-                      onClick={() => navigate(`/scans/${scan.scan_id}`)}
+                      onClick={() => navigate(`/scans/${scan.scan_id}`, { state: { projectId: scan.project_id } })}
                       className="group cursor-pointer hover:bg-slate-50/80 transition-all duration-300"
                     >
                       <td className="px-10 py-8">

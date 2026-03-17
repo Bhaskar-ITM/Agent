@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, RefreshCw, AlertCircle, CheckCircle, Clock, ExternalLink, Shield, Activity, Calendar, User, Zap, Lock, ChevronDown, ChevronUp, X, AlertTriangle, Terminal, Search, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { api } from '../services/api';
 import { useScanReset, useScanCancel } from '../hooks/useScanReset';
@@ -14,11 +14,16 @@ import { useToast } from '../components/Toast';
 const ScanStatusPage = () => {
   const { scanId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  // Get projectId from location state as fallback for back button
+  const projectIdFromState = (location.state as any)?.projectId;
 
   const toggleStage = (stageId: string) => {
     setExpandedStages(prev => ({ ...prev, [stageId]: !prev[stageId] }));
@@ -59,7 +64,11 @@ const ScanStatusPage = () => {
   const { connected: wsConnected, connecting: wsConnecting } = useScanWebSocket(scanId, undefined, {
     onMessage: (message) => {
       console.log('Scan real-time update received:', message);
-      refetch();
+      // Update cache directly instead of refetching
+      queryClient.setQueryData(['scan', scanId], {
+        scan: message.data,
+        stages: message.data.results || []
+      });
       setLastUpdated(new Date());
     }
   });
@@ -116,7 +125,12 @@ const ScanStatusPage = () => {
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
         <div className="flex items-center gap-6">
           <button
-            onClick={() => navigate(`/projects/${scan?.project_id}`)}
+            onClick={() => {
+              const projectId = scan?.project_id || projectIdFromState;
+              if (projectId) {
+                navigate(`/projects/${projectId}`);
+              }
+            }}
             className="p-4 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 rounded-[1.5rem] transition-all active:scale-90 shadow-sm group"
             aria-label="Return to project control plane"
           >
