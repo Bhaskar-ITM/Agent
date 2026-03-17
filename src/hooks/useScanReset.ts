@@ -19,24 +19,8 @@ export function useScanReset() {
 
   return useMutation({
     mutationFn: async (scanId: string): Promise<ScanResetResult> => {
-      const token = localStorage.getItem('token');
-      const apiKey = localStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
-
-      const headers: Record<string, string> = {};
-      if (apiKey) headers['X-API-Key'] = apiKey;
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const response = await fetch(`/api/v1/scans/${scanId}/reset`, {
-        method: 'POST',
-        headers,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to reset scan');
-      }
-
-      return response.json();
+      // Use api.scans.reset which handles auth headers via axios interceptor
+      return api.scans.reset(scanId);
     },
     onSuccess: (data) => {
       // Invalidate relevant queries to refresh UI
@@ -52,33 +36,8 @@ export function useScanCancel() {
 
   return useMutation({
     mutationFn: async (scanId: string): Promise<{ status: string; message: string; scan_id: string }> => {
-      const token = localStorage.getItem('token');
-      const apiKey = localStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
-
-      const headers: Record<string, string> = {};
-      if (apiKey) headers['X-API-Key'] = apiKey;
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const response = await fetch(`/api/v1/scans/${scanId}/cancel`, {
-        method: 'POST',
-        headers,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = 'Failed to cancel scan';
-        
-        try {
-          const error = JSON.parse(errorText);
-          errorMessage = error.detail || error.message || errorMessage;
-        } catch {
-          errorMessage = errorText || errorMessage;
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      return response.json();
+      // Use api.scans.cancel which handles auth headers via axios interceptor
+      return api.scans.cancel(scanId);
     },
     onSuccess: (data) => {
       // Invalidate relevant queries to refresh UI

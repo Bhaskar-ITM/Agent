@@ -143,7 +143,7 @@ const DashboardPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const apiKey = localStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
+    const apiKey = sessionStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
     if (!apiKey) {
       setShowApikeyBanner(true);
     }

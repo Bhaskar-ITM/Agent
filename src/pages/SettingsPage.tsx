@@ -11,7 +11,7 @@ const SettingsPage = () => {
   const [hasExistingKey, setHasExistingKey] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem('API_KEY');
+    const stored = sessionStorage.getItem('API_KEY');
     if (stored) {
       setApiKey(stored);
       setHasExistingKey(true);
@@ -36,17 +36,17 @@ const SettingsPage = () => {
       });
     }
 
-    localStorage.setItem('API_KEY', apiKey.trim());
+    sessionStorage.setItem('API_KEY', apiKey.trim());
     setHasExistingKey(true);
     addToast({
       type: 'success',
       title: 'API Key Saved',
-      message: 'Your API key has been securely stored in browser storage',
+      message: 'Your API key has been securely stored in browser session storage',
     });
   };
 
   const handleClear = () => {
-    localStorage.removeItem('API_KEY');
+    sessionStorage.removeItem('API_KEY');
     setApiKey('');
     setHasExistingKey(false);
     addToast({
@@ -128,7 +128,7 @@ const SettingsPage = () => {
             </div>
             <p className="text-[10px] font-medium text-slate-400 ml-1 flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5 opacity-50" />
-              Stored locally in browser localStorage • Not shared with external services
+              Stored locally in browser sessionStorage (cleared on tab close) • Not shared with external services
             </p>
           </div>
 

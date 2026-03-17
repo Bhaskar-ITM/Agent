@@ -12,17 +12,17 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  
+
   // Always include API Key for backend authentication
-  const apiKey = localStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
+  const apiKey = sessionStorage.getItem('API_KEY') || import.meta.env.VITE_API_KEY;
   if (apiKey) {
     config.headers['X-API-Key'] = apiKey;
   }
-  
+
   return config;
 });
 

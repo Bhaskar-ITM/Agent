@@ -184,7 +184,7 @@ const UserManagementPage = () => {
 
           <button
             onClick={() => {
-              localStorage.clear();
+              sessionStorage.clear();
               window.location.reload();
             }}
             className="p-6 bg-white border border-slate-200 rounded-[2rem] hover:border-red-300 hover:shadow-xl hover:shadow-red-900/5 transition-all group text-left"
