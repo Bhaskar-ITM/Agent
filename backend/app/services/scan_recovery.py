@@ -6,6 +6,7 @@ QUEUED or RUNNING state for too long and marks them as FAILED.
 """
 
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import List
 
@@ -18,6 +19,9 @@ from app.infrastructure.jenkins.jenkins_client import JenkinsClient
 from app.core.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
+
+# Shutdown event for graceful termination
+shutdown_event = threading.Event()
 
 TERMINAL_STATES = {ScanState.COMPLETED, ScanState.FAILED, ScanState.CANCELLED}
 JENKINS_JOB_NAME = "Security-pipeline"
@@ -262,11 +266,9 @@ def recover_single_scan(scan_id: str) -> bool:
 def run_recovery_task():
     """
     Background task to run recovery periodically.
-    
+
     Call this from a background thread or scheduler.
     """
-    import time
-    
     while True:
         try:
             logger.info("Running scheduled scan recovery...")
@@ -280,6 +282,8 @@ def run_recovery_task():
                 logger.debug("Recovery task complete: no stuck scans found")
         except Exception as e:
             logger.error(f"Recovery task failed: {e}", exc_info=True)
-        
-        # Run every 5 minutes
-        time.sleep(300)
+
+        # Wait for 5 minutes or until shutdown is requested
+        if shutdown_event.wait(300):
+            logger.info("Shutdown event received, exiting recovery task")
+            break

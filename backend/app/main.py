@@ -51,7 +51,7 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-from app.services.scan_recovery import run_recovery_task
+from app.services.scan_recovery import run_recovery_task, shutdown_event
 import threading
 
 ...
@@ -73,6 +73,12 @@ def validate_configuration():
     # Start scan recovery background task (Phase 1.3)
     threading.Thread(target=run_recovery_task, daemon=True).start()
     logger.info("Started scan recovery background task")
+
+@app.on_event("shutdown")
+def shutdown_recovery_task():
+    """Signal the recovery thread to shut down gracefully."""
+    logger.info("Signaling recovery task to shut down...")
+    shutdown_event.set()
 
 # Auth routes are public - no authentication required
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
