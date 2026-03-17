@@ -150,7 +150,7 @@ const DashboardPage = () => {
   }, []);
 
   // WebSocket for real-time dashboard updates (Phase 3.1)
-  useScanWebSocket(undefined, undefined, {
+  const { connected: wsConnected } = useScanWebSocket(undefined, undefined, {
     onMessage: (message) => {
       console.log('Dashboard real-time update received:', message);
       // Invalidate projects query to fetch latest states
@@ -164,7 +164,7 @@ const DashboardPage = () => {
   const { data: projects = [], isLoading: loading } = useQuery({
     queryKey: ['projects'],
     queryFn: api.projects.list,
-    refetchInterval: 10000,
+    refetchInterval: wsConnected ? false : 10000,
   });
 
   // Performance: Debounce search input to avoid re-filtering and re-renders on every keystroke
