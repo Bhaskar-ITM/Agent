@@ -44,7 +44,7 @@ def list_projects(db: Session = Depends(get_db)):
         {
             "project_id": p.project_id,
             "name": p.name,
-            "last_scan_state": p.last_scan_state or "NONE",
+            "last_scan_state": p.last_scan_state,
             "last_scan_id": last_scan_map.get(p.project_id),
         }
         for p in db_projects
