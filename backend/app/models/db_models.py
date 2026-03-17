@@ -29,7 +29,7 @@ class ScanDB(Base):
     scan_mode = Column(String, nullable=False)
     selected_stages = Column(JSON, default=list)
     state = Column(Enum(ScanState), default=ScanState.CREATED, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     jenkins_build_number = Column(String, nullable=True)

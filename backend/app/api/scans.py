@@ -165,7 +165,11 @@ def _expire_scan_if_timed_out(
     timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.SCAN_TIMEOUT
 
     reference_time = scan_obj.started_at or scan_obj.created_at
-    if now - reference_time > timedelta(seconds=timeout_seconds):
+    # Handle timezone-naive datetimes from database by assuming UTC
+    if reference_time and reference_time.tzinfo is None:
+        reference_time = reference_time.replace(tzinfo=timezone.utc)
+    
+    if reference_time and now - reference_time > timedelta(seconds=timeout_seconds):
         scan_obj.state = ScanState.FAILED
         scan_obj.finished_at = now
         scan_obj.error_message = f"Scan timed out after {settings.SCAN_TIMEOUT} seconds"
