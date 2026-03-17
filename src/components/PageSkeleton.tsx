@@ -5,6 +5,26 @@ interface PageSkeletonProps {
 }
 
 export function PageSkeleton({ type = 'dashboard' }: PageSkeletonProps) {
+  const renderFormSkeleton = () => (
+    <div className="max-w-md mx-auto space-y-6 animate-pulse">
+      <div className="space-y-2">
+        <div className="h-4 w-32 bg-slate-200 rounded-md"></div>
+        <div className="h-12 w-full bg-white border border-slate-200 rounded-xl"></div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 w-32 bg-slate-200 rounded-md"></div>
+        <div className="h-12 w-full bg-white border border-slate-200 rounded-xl"></div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 w-32 bg-slate-200 rounded-md"></div>
+        <div className="h-12 w-full bg-white border border-slate-200 rounded-xl"></div>
+      </div>
+      <div className="pt-4">
+        <div className="h-12 w-full bg-slate-200 rounded-xl"></div>
+      </div>
+    </div>
+  );
+
   const renderDashboardSkeleton = () => (
     <div className="space-y-8 animate-pulse">
       <div className="flex justify-between items-end">
@@ -81,8 +101,8 @@ export function PageSkeleton({ type = 'dashboard' }: PageSkeletonProps) {
 
   return (
     <div className="p-8">
-      {type === 'dashboard' ? renderDashboardSkeleton() : renderScanSkeleton()}
-      
+      {type === 'form' ? renderFormSkeleton() : type === 'dashboard' ? renderDashboardSkeleton() : renderScanSkeleton()}
+
       {/* Centered Loading Logo */}
       <div className="fixed inset-0 pointer-events-none flex flex-col items-center justify-center z-50">
         <div className="relative">
