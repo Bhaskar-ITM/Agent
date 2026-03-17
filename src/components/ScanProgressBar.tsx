@@ -84,14 +84,14 @@ function useElapsedTime(startedAt?: string, isRunning?: boolean) {
     if (!startedAt) return;
 
     const startTime = new Date(startedAt).getTime();
-    
+
     const update = () => {
       const now = new Date().getTime();
       const diff = Math.max(0, now - startTime);
-      
+
       const mins = Math.floor(diff / 60000);
       const secs = Math.floor((diff % 60000) / 1000);
-      
+
       setElapsed(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
     };
 
@@ -100,23 +100,54 @@ function useElapsedTime(startedAt?: string, isRunning?: boolean) {
     if (isRunning) {
       interval = setInterval(update, 1000);
     }
-    
+
     return () => clearInterval(interval);
   }, [startedAt, isRunning]);
 
   return elapsed;
 }
 
-export function ScanProgressBar({ 
-  stages, 
-  scanState, 
+/**
+ * Hook to track initialization time and detect stalled pipeline
+ * Returns seconds elapsed and whether we've exceeded the 5-minute warning threshold
+ */
+function useInitializationTime(startedAt?: string, isRunning?: boolean, hasStages?: boolean) {
+  const [seconds, setSeconds] = useState<number>(0);
+  const isStalled = seconds >= 300; // 5 minutes warning threshold
+
+  useEffect(() => {
+    if (!startedAt || !isRunning || hasStages) {
+      setSeconds(0);
+      return;
+    }
+
+    const startTime = new Date(startedAt).getTime();
+
+    const update = () => {
+      const now = new Date().getTime();
+      const diff = Math.max(0, now - startTime);
+      setSeconds(Math.floor(diff / 1000));
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+
+    return () => clearInterval(interval);
+  }, [startedAt, isRunning, hasStages]);
+
+  return { seconds, isStalled };
+}
+
+export function ScanProgressBar({
+  stages,
+  scanState,
   startedAt,
-  selectedStages 
+  selectedStages
 }: ScanProgressBarProps) {
   const isRunning = scanState === 'RUNNING' || scanState === 'QUEUED';
   const isComplete = scanState === 'COMPLETED';
   const isFailed = scanState === 'FAILED';
-  
+
   const elapsed = useElapsedTime(startedAt, isRunning);
 
   const relevantStages = selectedStages && selectedStages.length > 0
@@ -125,8 +156,56 @@ export function ScanProgressBar({
 
   const { completed, running, percentage } = calculateProgress(stages, relevantStages);
 
+  // Track initialization state: show warning if pipeline running but no stages after 5 minutes
+  const { seconds: initSeconds, isStalled } = useInitializationTime(startedAt, isRunning, stages.length > 0);
+  const isInitializing = isRunning && stages.length === 0;
+
   return (
     <div className="bg-white p-8" role="region" aria-label="Scan progress">
+      {/* Initializing State Banner */}
+      {isInitializing && (
+        <div className={`mb-8 p-6 rounded-2xl border-2 transition-all ${
+          isStalled
+            ? 'bg-amber-50 border-amber-200 shadow-lg shadow-amber-100'
+            : 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100'
+        }`} role="status" aria-live="polite">
+          <div className="flex items-start gap-4">
+            <div className={`mt-0.5 w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+              isStalled ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
+            }`}>
+              {isStalled ? (
+                <AlertCircle className="w-5 h-5" />
+              ) : (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              )}
+            </div>
+            <div className="flex-1">
+              <h4 className={`text-base font-black uppercase tracking-tight mb-1 ${
+                isStalled ? 'text-amber-900' : 'text-blue-900'
+              }`}>
+                {isStalled ? 'Pipeline Initialization Delayed' : 'Pipeline Initializing'}
+              </h4>
+              <p className={`text-sm mb-3 ${isStalled ? 'text-amber-700' : 'text-blue-700'}`}>
+                {isStalled
+                  ? 'The pipeline is taking longer than expected to start. This may indicate Jenkins queue delays or resource constraints.'
+                  : 'The pipeline is starting up. Stage data will appear shortly as Jenkins begins execution.'}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono font-black uppercase tracking-widest ${
+                  isStalled ? 'text-amber-600' : 'text-blue-600'
+                }`}>
+                  Initializing for: {Math.floor(initSeconds / 60)}m {initSeconds % 60}s
+                </span>
+                {isStalled && (
+                  <span className="text-xs font-black text-amber-600 uppercase tracking-widest bg-amber-100 px-2 py-0.5 rounded">
+                    Warning: &gt;5 min
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-4">
