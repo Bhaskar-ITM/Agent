@@ -6,12 +6,14 @@ import { useState, useMemo } from 'react';
 import { PageSkeleton } from '../components/PageSkeleton';
 import { EmptyState } from '../components/EmptyState';
 import { useScanReset } from '../hooks/useScanReset';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export default function ScanHistoryPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [confirmReset, setConfirmReset] = useState<{isOpen: boolean, scanId: string} | null>(null);
   const resetMutation = useScanReset();
 
   const { data: history = [], isLoading, refetch } = useQuery({
@@ -30,9 +32,16 @@ export default function ScanHistoryPage() {
 
   const handleReset = async (e: React.MouseEvent, scanId: string) => {
     e.stopPropagation();
-    if (window.confirm('Operational Decision: Reset this execution trace and allow re-triggering?')) {
-      resetMutation.mutate(scanId, {
-        onSuccess: () => refetch()
+    setConfirmReset({ isOpen: true, scanId });
+  };
+
+  const handleConfirmReset = () => {
+    if (confirmReset) {
+      resetMutation.mutate(confirmReset.scanId, {
+        onSuccess: () => {
+          refetch();
+          setConfirmReset(null);
+        }
       });
     }
   };
@@ -203,6 +212,19 @@ export default function ScanHistoryPage() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmReset?.isOpen ?? false}
+        onClose={() => setConfirmReset(null)}
+        onConfirm={handleConfirmReset}
+        title="Reset Scan?"
+        message="Operational Decision: Reset this execution trace and allow re-triggering?"
+        confirmLabel="Reset & Retry"
+        cancelLabel="Abort Operation"
+        variant="warning"
+        icon={<RefreshCw className="w-12 h-12" />}
+        isPending={resetMutation.isPending}
+      />
     </div>
   );
 }

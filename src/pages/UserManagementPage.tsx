@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Users, Plus, Trash2, CheckCircle, Key, Shield, LogOut } from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 interface User {
   id: string;
@@ -15,6 +16,7 @@ const UserManagementPage = () => {
     { id: '1', username: 'admin' },
     { id: '2', username: 'john' }
   ]);
+  const [confirmDelete, setConfirmDelete] = useState<{isOpen: boolean, userId: string, username: string} | null>(null);
 
   const handleDeleteUser = (userId: string, username: string) => {
     if (username === 'admin') {
@@ -25,14 +27,18 @@ const UserManagementPage = () => {
       });
       return;
     }
+    setConfirmDelete({ isOpen: true, userId, username });
+  };
 
-    if (window.confirm(`Are you sure you want to delete user "${username}"?`)) {
-      setUsers(users.filter(u => u.id !== userId));
+  const handleConfirmDelete = () => {
+    if (confirmDelete) {
+      setUsers(users.filter(u => u.id !== confirmDelete.userId));
       addToast({
         type: 'success',
         title: 'User Deleted',
-        message: `User "${username}" has been removed`,
+        message: `User "${confirmDelete.username}" has been removed`,
       });
+      setConfirmDelete(null);
     }
   };
 
@@ -195,6 +201,18 @@ const UserManagementPage = () => {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmDelete?.isOpen ?? false}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete User?"
+        message={`Are you sure you want to delete user "${confirmDelete?.username}"? This action cannot be undone.`}
+        confirmLabel="Delete User"
+        cancelLabel="Abort Operation"
+        variant="danger"
+        icon={<Trash2 className="w-12 h-12" />}
+      />
     </div>
   );
 };
