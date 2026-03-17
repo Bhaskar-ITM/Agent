@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { api } from '../services/api';
+import { ApiError } from '../utils/apiError';
 import { useAuth } from '../hooks/useAuth';
 
 const LoginPage = () => {
@@ -36,10 +37,11 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     } catch (err: unknown) {
       console.error('Login failed', err);
-      const errorMessage = err && typeof err === 'object' && 'response' in err 
-        ? (err.response as { data?: { detail?: string } })?.data?.detail 
-        : 'Invalid credentials. Please verify your identity and try again.';
-      setError(errorMessage || 'Invalid credentials.');
+      if (ApiError.isApiError(err)) {
+        setError(err.message);
+      } else {
+        setError('Invalid credentials. Please verify your identity and try again.');
+      }
     } finally {
       setIsLoading(false);
     }

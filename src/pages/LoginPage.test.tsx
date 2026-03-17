@@ -1,8 +1,12 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import LoginPage from './LoginPage';
 import { AuthProvider } from '../hooks/useAuth';
+import { api } from '../services/api';
+import { ApiError } from '../utils/apiError';
+
+vi.mock('../services/api');
 
 describe('LoginPage', () => {
   it('toggles password visibility when the eye icon is clicked', () => {
@@ -40,7 +44,56 @@ describe('LoginPage', () => {
       </AuthProvider>
     );
 
-    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/operator identity/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /authorize entry/i })).toBeInTheDocument();
+  });
+
+  it('displays specific error message when ApiError is thrown', async () => {
+    const mockApiError = new ApiError(401, 'Invalid credentials');
+    vi.mocked(api.auth.login).mockRejectedValueOnce(mockApiError);
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    const usernameInput = screen.getByLabelText(/operator identity/i);
+    const passwordInput = screen.getByPlaceholderText('••••••••');
+    const submitButton = screen.getByRole('button', { name: /authorize entry/i });
+
+    fireEvent.change(usernameInput, { target: { value: 'testuser' } });
+    fireEvent.change(passwordInput, { target: { value: 'wrongpassword' } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
+    });
+  });
+
+  it('displays generic error message for non-ApiError failures', async () => {
+    vi.mocked(api.auth.login).mockRejectedValueOnce(new Error('Network error'));
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    const usernameInput = screen.getByLabelText(/operator identity/i);
+    const passwordInput = screen.getByPlaceholderText('••••••••');
+    const submitButton = screen.getByRole('button', { name: /authorize entry/i });
+
+    fireEvent.change(usernameInput, { target: { value: 'testuser' } });
+    fireEvent.change(passwordInput, { target: { value: 'wrongpassword' } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid credentials. Please verify your identity and try again.')).toBeInTheDocument();
+    });
   });
 });
