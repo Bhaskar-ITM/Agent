@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Shield, LayoutDashboard, PlusCircle, LogOut, Menu, X, Activity, History, Settings, Key } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { Breadcrumbs } from './Breadcrumbs';
 import { api } from '../services/api';
@@ -11,38 +12,27 @@ const Layout = () => {
   const { projectId, scanId } = useParams();
   const { logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [currentProject, setCurrentProject] = useState<{ id: string; name: string } | undefined>();
 
-  useEffect(() => {
-    const fetchProjectContext = async () => {
-      let activeProjectId = projectId;
+  // Fetch scan context if scanId is present
+  const { data: scanData } = useQuery({
+    queryKey: ['scan', scanId],
+    queryFn: () => scanId ? api.scans.get(scanId) : null,
+    enabled: !!scanId,
+    retry: false,
+  });
 
-      if (!activeProjectId && scanId) {
-        try {
-          const scan = await api.scans.get(scanId);
-          activeProjectId = scan?.project_id;
-        } catch (err) {
-          console.error('Failed to fetch scan context:', err);
-        }
-      }
+  // Determine active project ID
+  const activeProjectId = projectId || scanData?.project_id;
 
-      if (activeProjectId) {
-        try {
-          const data = await api.projects.get(activeProjectId);
-          if (data) {
-            setCurrentProject({ id: data.project_id, name: data.name });
-          }
-        } catch (err) {
-          console.error('Failed to fetch project context:', err);
-          setCurrentProject(undefined);
-        }
-      } else {
-        setCurrentProject(undefined);
-      }
-    };
+  // Fetch project context using React Query
+  const { data: projectData } = useQuery({
+    queryKey: ['project', activeProjectId],
+    queryFn: () => activeProjectId ? api.projects.get(activeProjectId) : null,
+    enabled: !!activeProjectId,
+    retry: false,
+  });
 
-    fetchProjectContext();
-  }, [projectId, scanId]);
+  const currentProject = projectData ? { id: projectData.project_id, name: projectData.name } : undefined;
 
   const handleLogout = () => {
     logout();
