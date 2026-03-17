@@ -27,6 +27,7 @@ const ProjectControlPage = () => {
   const [hasActiveScan, setHasActiveScan] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isTriggering, setIsTriggering] = useState(false);
 
   const handleCopy = (text: string, fieldId: string) => {
     navigator.clipboard.writeText(text);
@@ -52,7 +53,7 @@ const ProjectControlPage = () => {
 
   const handleRunAutomated = async () => {
     if (!projectId) return;
-    setLoading(true);
+    setIsTriggering(true);
     try {
       setError(null);
       const scan = await api.scans.trigger(projectId, 'automated');
@@ -60,7 +61,7 @@ const ProjectControlPage = () => {
     } catch (_: any) {
       const detail = 'Failed to trigger scan';
       setError(detail);
-      setLoading(false);
+      setIsTriggering(false);
       setShowConfirm(false);
     }
   };
@@ -311,11 +312,20 @@ const ProjectControlPage = () => {
               </div>
               <button
                 onClick={() => setShowConfirm(true)}
-                disabled={hasActiveScan}
+                disabled={hasActiveScan || isTriggering}
                 className="w-full bg-white text-blue-600 hover:bg-blue-50 py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[10px] transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-blue-900/30 flex items-center justify-center gap-3"
               >
-                <Play className="w-4 h-4 fill-current" />
-                Initialize Engine
+                {isTriggering ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    Initializing...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 fill-current" />
+                    Initialize Engine
+                  </>
+                )}
               </button>
             </div>
           </div>

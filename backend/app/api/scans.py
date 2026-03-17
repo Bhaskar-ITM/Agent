@@ -6,6 +6,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Header, HTTPException, status, Depends, Request, BackgroundTasks
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -272,25 +273,38 @@ def trigger_scan(request: Request, scan: ScanCreate, background_tasks: Backgroun
                 logger.warning(f"Invalid X-Scan-Timeout header value ({x_scan_timeout}), using calculated timeout")
         except ValueError:
             logger.warning(f"Invalid X-Scan-Timeout header value ({x_scan_timeout}), using calculated timeout")
-    
+
     # Create scan in CREATED state - will transition to RUNNING when Jenkins confirms via callback
     # This prevents phantom scans that block users if Jenkins trigger fails
-    scan_obj = ScanDB(
-        scan_id=scan_id,
-        project_id=scan.project_id,
-        scan_mode=scan.scan_mode,
-        selected_stages=scan.selected_stages or [],
-        state=ScanState.CREATED,
-        created_at=datetime.utcnow(),
-        started_at=None,  # Will be set when Jenkins confirms build started
-        jenkins_build_number=None,
-        jenkins_queue_id=None,
-        stage_results=[],
-        callback_digests=[]
-    )
-    db.add(scan_obj)
-    project.last_scan_state = scan_obj.state.value
-    db.commit()
+    try:
+        scan_obj = ScanDB(
+            scan_id=scan_id,
+            project_id=scan.project_id,
+            scan_mode=scan.scan_mode,
+            selected_stages=scan.selected_stages or [],
+            state=ScanState.CREATED,
+            created_at=datetime.utcnow(),
+            started_at=None,  # Will be set when Jenkins confirms build started
+            jenkins_build_number=None,
+            jenkins_queue_id=None,
+            stage_results=[],
+            callback_digests=[]
+        )
+        db.add(scan_obj)
+        project.last_scan_state = scan_obj.state.value
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        # Handle race condition: another request created an active scan
+        if 'ix_scans_project_state' in str(e.orig) or 'uq_project_active_state' in str(e.orig):
+            logger.info(f"Duplicate scan prevented for project {scan.project_id} (database constraint)")
+            raise HTTPException(
+                status_code=409,
+                detail="An active scan already exists for this project",
+            )
+        # Re-raise if it's a different integrity error
+        raise
+    
     db.refresh(scan_obj)
 
     # Broadcast initial update (Phase 3.1)

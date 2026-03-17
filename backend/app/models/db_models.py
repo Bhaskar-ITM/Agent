@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Enum, JSON
+from sqlalchemy import Column, String, DateTime, Enum, JSON, Index
 from app.core.db import Base
 from app.state.scan_state import ScanState
 
@@ -38,6 +38,11 @@ class ScanDB(Base):
     error_type = Column(String, nullable=True)  # e.g., "PIPELINE_ERROR", "SECURITY_ISSUE"
     jenkins_console_url = Column(String, nullable=True)  # Direct link to Jenkins logs
     retry_count = Column(String, default="0", nullable=False)  # Number of retries
+    
+    # Index for faster active scan lookups
+    __table_args__ = (
+        Index('ix_scans_project_state', 'project_id', 'state'),
+    )
 
 class UserDB(Base):
     __tablename__ = "users"
