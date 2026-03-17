@@ -18,6 +18,7 @@ export const Breadcrumbs = ({ projectName }: BreadcrumbsProps) => {
     queryKey: ['scan', scanId],
     queryFn: () => api.scans.get(scanId!),
     enabled: !!scanId && !projectId,
+    staleTime: 5 * 60 * 1000, // 5 minutes - prefer cached data to avoid duplicate API calls
   });
 
   const activeProjectId = projectId || scan?.project_id;
