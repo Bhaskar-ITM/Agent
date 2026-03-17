@@ -6,7 +6,7 @@ QUEUED or RUNNING state for too long and marks them as FAILED.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -59,7 +59,7 @@ def poll_jenkins_for_active_scans() -> int:
         active_scans = db.query(ScanDB).filter(
             ScanDB.state.in_([ScanState.QUEUED, ScanState.RUNNING])
         ).all()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for scan_obj in active_scans:
             project_obj = db.query(ProjectDB).filter(
@@ -169,7 +169,7 @@ def recover_stuck_scans() -> int:
     """
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         timeout_threshold = now - timedelta(seconds=settings.SCAN_TIMEOUT)
         
         # Find stuck scans
@@ -236,7 +236,7 @@ def recover_single_scan(scan_id: str) -> bool:
         
         # Mark as failed
         scan_obj.state = ScanState.FAILED
-        scan_obj.finished_at = datetime.utcnow()
+        scan_obj.finished_at = datetime.now(timezone.utc)
         scan_obj.error_message = "Recovered by admin request"
         scan_obj.error_type = "ADMIN_RECOVERY"
         

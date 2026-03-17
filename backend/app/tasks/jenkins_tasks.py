@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.celery_app import celery_app
 from app.services.jenkins_service import jenkins_service
@@ -33,7 +33,7 @@ def trigger_jenkins_scan_async(self, scan_id: str, scan_mode: str, selected_stag
 
         if not accepted:
             scan_obj.state = ScanState.FAILED
-            scan_obj.finished_at = datetime.utcnow()
+            scan_obj.finished_at = datetime.now(timezone.utc)
             scan_obj.error_message = "Failed to trigger Jenkins pipeline"
             scan_obj.error_type = "PIPELINE_ERROR"
             # FIX: Also update project's last_scan_state when Jenkins trigger fails

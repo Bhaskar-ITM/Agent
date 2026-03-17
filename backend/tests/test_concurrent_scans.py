@@ -9,7 +9,7 @@ Tests verify that:
 import threading
 import time
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.state.scan_state import ScanState
 from app.models.db_models import ScanDB, ProjectDB
@@ -93,7 +93,7 @@ class TestConcurrentScanPrevention:
             scan_mode="automated",
             selected_stages=[],
             state=ScanState.CREATED,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             stage_results=[],
             callback_digests=[]
         )
@@ -135,8 +135,8 @@ class TestConcurrentScanPrevention:
             scan_mode="automated",
             selected_stages=[],
             state=ScanState.COMPLETED,
-            created_at=datetime.utcnow(),
-            finished_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
             stage_results=[],
             callback_digests=[]
         )

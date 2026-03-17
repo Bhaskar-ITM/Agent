@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 
@@ -22,7 +22,7 @@ def persist_state(scans_db: dict, projects_db: dict) -> None:
         tmp = state_file.with_suffix(".tmp")
 
         payload = {
-            "persisted_at": datetime.utcnow().isoformat(),
+            "persisted_at": datetime.now(timezone.utc).isoformat(),
             "scans": {
                 sid: {
                     "scan_id": s.scan_id,
@@ -82,7 +82,7 @@ def restore_state() -> tuple[dict, dict]:
 
             if scan.state in {ScanState.CREATED, ScanState.QUEUED, ScanState.RUNNING}:
                 scan.state = ScanState.FAILED
-                scan.finished_at = datetime.utcnow()
+                scan.finished_at = datetime.now(timezone.utc)
 
             scans[sid] = scan
         except Exception:

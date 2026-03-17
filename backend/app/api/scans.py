@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
@@ -161,7 +161,7 @@ def _expire_scan_if_timed_out(
     if scan_obj.state in TERMINAL_STATES:
         return False
 
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc)
     timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.SCAN_TIMEOUT
 
     reference_time = scan_obj.started_at or scan_obj.created_at
@@ -223,7 +223,7 @@ def list_scans(request: Request, db: Session = Depends(get_db)):
         project_map = {p.project_id: p for p in projects}
 
         # Pre-calculate common values for timeout check
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         timeout_seconds = settings.SCAN_TIMEOUT
         any_expired = False
 
@@ -283,7 +283,7 @@ def trigger_scan(request: Request, scan: ScanCreate, background_tasks: Backgroun
             scan_mode=scan.scan_mode,
             selected_stages=scan.selected_stages or [],
             state=ScanState.CREATED,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             started_at=None,  # Will be set when Jenkins confirms build started
             jenkins_build_number=None,
             jenkins_queue_id=None,
@@ -429,7 +429,7 @@ def scan_callback(
     if jenkins_status == "RUNNING":
         # Jenkins confirmed build started - transition from CREATED to RUNNING
         scan_obj.state = ScanState.RUNNING
-        scan_obj.started_at = datetime.utcnow()
+        scan_obj.started_at = datetime.now(timezone.utc)
         logger.info(f"Scan {scan_id} transitioned to RUNNING state")
     elif jenkins_status == "SUCCESS":
         scan_obj.state = ScanState.COMPLETED
@@ -472,9 +472,9 @@ def scan_callback(
         try:
             scan_obj.finished_at = datetime.fromisoformat(finished_at_str.replace("Z", "+00:00"))
         except ValueError:
-            scan_obj.finished_at = datetime.utcnow()
+            scan_obj.finished_at = datetime.now(timezone.utc)
     elif scan_obj.state in TERMINAL_STATES:
-        scan_obj.finished_at = datetime.utcnow()
+        scan_obj.finished_at = datetime.now(timezone.utc)
 
     current_digests.append(callback_digest)
     scan_obj.callback_digests = list(current_digests)
@@ -587,7 +587,7 @@ def cancel_scan(
     
     # Cancel scan
     scan_obj.state = ScanState.CANCELLED
-    scan_obj.finished_at = datetime.utcnow()
+    scan_obj.finished_at = datetime.now(timezone.utc)
     scan_obj.error_message = "Cancelled by user"
     scan_obj.error_type = "USER_CANCELLED"
     
@@ -648,7 +648,7 @@ def force_unlock_scan(
     
     # Force-unlock the scan
     scan_obj.state = ScanState.FAILED
-    scan_obj.finished_at = datetime.utcnow()
+    scan_obj.finished_at = datetime.now(timezone.utc)
     scan_obj.error_message = "Scan unlocked by administrator"
     scan_obj.error_type = "ADMIN_RECOVERY"
     

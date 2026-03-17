@@ -7,7 +7,7 @@ Tests verify that:
 3. Admin force-unlock endpoint works for stuck projects
 """
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.state.scan_state import ScanState
@@ -190,8 +190,8 @@ class TestAdminForceUnlock:
             scan_mode="automated",
             selected_stages=["sonar_scanner"],
             state=ScanState.RUNNING,
-            created_at=datetime.utcnow(),
-            started_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc),
             stage_results=[],
             callback_digests=[]
         )
@@ -240,8 +240,8 @@ class TestAdminForceUnlock:
             scan_mode="automated",
             selected_stages=["sonar_scanner"],
             state=ScanState.RUNNING,
-            created_at=datetime.utcnow(),
-            started_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc),
             stage_results=[],
             callback_digests=[]
         )
