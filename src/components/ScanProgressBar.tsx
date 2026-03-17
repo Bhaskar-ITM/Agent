@@ -71,7 +71,9 @@ function calculateProgress(stages: ScanStage[], relevantStages: string[]): {
     }
   });
 
-  const totalStages = relevantStages.length;
+  // Guard against division by zero: ensure denominator is never zero
+  // Fallback to 1 prevents NaN when selectedStages is empty array
+  const totalStages = relevantStages.length || 1;
   const percentage = totalStages > 0 ? Math.round((completed / totalStages) * 100) : 0;
 
   return { completed, running, percentage };
