@@ -177,8 +177,9 @@ const ManualScanPage = () => {
                   type="button"
                   onClick={handleToggleAll}
                   className="px-6 py-2.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200"
+                  aria-label={selectedStages.length === FIXED_STAGES.length ? 'Deselect all stages' : 'Select all stages'}
                 >
-                  {selectedStages.length === FIXED_STAGES.length ? 'Deselect All' : 'Arm All Stages'}
+                  {selectedStages.length === FIXED_STAGES.length ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
 
