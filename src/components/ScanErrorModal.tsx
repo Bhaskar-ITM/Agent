@@ -18,12 +18,16 @@ export function ScanErrorModal({ isOpen, onClose, error, onRetry, isRetrying = f
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Focus the close button when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      closeButtonRef.current?.focus();
+    }
+  }, [isOpen]);
+
   // Focus trap and ESC listener
   useEffect(() => {
     if (isOpen) {
-      // Focus the close button or the modal itself when opened
-      setTimeout(() => closeButtonRef.current?.focus(), 100);
-      
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') onClose();
         if (e.key === 'Tab' && modalRef.current) {
@@ -45,7 +49,7 @@ export function ScanErrorModal({ isOpen, onClose, error, onRetry, isRetrying = f
 
       document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
-      
+
       return () => {
         document.removeEventListener('keydown', handleKeyDown);
         document.body.style.overflow = 'unset';
