@@ -21,8 +21,8 @@ pipeline {
         // Use environment variable for backend URL, fallback to localhost:8000 for dev
         CALLBACK_URL = "${env.BACKEND_URL ?: 'http://localhost:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
         REPORT_DIR = "reports"
-        // Get callback token from Jenkins credentials or use default
-        CALLBACK_TOKEN = "${env.CALLBACK_TOKEN ?: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'}"
+        // Get callback token from Jenkins credentials (no fallback - fails if not set)
+        CALLBACK_TOKEN = "${env.CALLBACK_TOKEN}"
     }
 
     options {
