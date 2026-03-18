@@ -1,22 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Key, Shield, CheckCircle, AlertCircle, Info, ChevronLeft } from 'lucide-react';
+import { Key, Shield, CheckCircle, AlertCircle, Info, ChevronLeft, Bell } from 'lucide-react';
 import { useToast } from '../components/Toast';
+import { notificationService } from '../services/notifications';
 
 const SettingsPage = () => {
   const navigate = useNavigate();
   const { addToast } = useToast();
-  const [apiKey, setApiKey] = useState('');
+  
+  // Initialize state from session storage (lazy initialization)
+  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('API_KEY') || '');
   const [showKey, setShowKey] = useState(false);
-  const [hasExistingKey, setHasExistingKey] = useState(false);
-
-  useEffect(() => {
-    const stored = sessionStorage.getItem('API_KEY');
-    if (stored) {
-      setApiKey(stored);
-      setHasExistingKey(true);
+  const [hasExistingKey, setHasExistingKey] = useState(() => !!sessionStorage.getItem('API_KEY'));
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    if ('Notification' in window) {
+      return Notification.permission;
     }
-  }, []);
+    return 'default';
+  });
 
   const handleSave = () => {
     if (!apiKey.trim()) {
@@ -43,6 +44,24 @@ const SettingsPage = () => {
       title: 'API Key Saved',
       message: 'Your API key has been securely stored in browser session storage',
     });
+  };
+
+  const handleNotificationPermission = async () => {
+    const granted = await notificationService.requestPermission();
+    if (granted) {
+      setNotificationPermission('granted');
+      addToast({
+        type: 'success',
+        title: 'Notifications Enabled',
+        message: 'Desktop notifications are now enabled for scan updates',
+      });
+    } else {
+      addToast({
+        type: 'error',
+        title: 'Permission Denied',
+        message: 'Notification permission was denied or is not supported',
+      });
+    }
   };
 
   const handleClear = () => {
@@ -177,6 +196,60 @@ const SettingsPage = () => {
               </div>
             </div>
           )}
+
+          {/* Desktop Notifications Section */}
+          <div className="border-t border-slate-200 pt-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
+                <Bell className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Desktop Notifications</h3>
+                <p className="text-slate-500 text-xs font-medium">Get notified when scans complete</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-4">
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                Enable browser notifications to receive desktop alerts when your security scans complete or fail.
+                Notifications include scan status and a quick link to view results.
+              </p>
+
+              <button
+                onClick={handleNotificationPermission}
+                disabled={notificationPermission === 'granted'}
+                className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all active:scale-95 flex items-center justify-center gap-3 ${
+                  notificationPermission === 'granted'
+                    ? 'bg-green-100 text-green-700 border-2 border-green-300 cursor-default'
+                    : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200'
+                }`}
+              >
+                {notificationPermission === 'granted' ? (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    Notifications Enabled
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-5 h-5" />
+                    Enable Desktop Notifications
+                  </>
+                )}
+              </button>
+
+              {notificationPermission === 'denied' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider mb-1">Permission Denied</h4>
+                    <p className="text-xs text-amber-700 font-medium">
+                      You have blocked notifications. To re-enable, go to your browser settings and allow notifications for this site.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

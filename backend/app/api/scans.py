@@ -508,10 +508,10 @@ def reset_scan(
 
     This endpoint:
     - Resets scan state to CREATED
-    - Updates project's last_scan_state to CREATED
     - Clears error messages
     - Increments retry_count (max MAX_RETRY_COUNT)
     - Allows new scan to be triggered
+    - Does NOT update project.last_scan_state (dashboard will show no active scan)
     """
     # Find scan
     scan_obj = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
@@ -542,8 +542,9 @@ def reset_scan(
     scan_obj.stage_results = []
     scan_obj.callback_digests = []
 
-    # Reset project state
-    project_obj.last_scan_state = ScanState.CREATED.value
+    # Note: We do NOT update project_obj.last_scan_state here
+    # This allows the dashboard to correctly show "no active scan" after reset
+    # The project state will be updated when a new scan is triggered
 
     db.commit()
     db.refresh(scan_obj)

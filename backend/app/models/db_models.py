@@ -20,6 +20,8 @@ class ProjectDB(Base):
     sonar_key = Column(String, nullable=True)
     target_ip = Column(String, nullable=True)
     target_url = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 class ScanDB(Base):
     __tablename__ = "scans"
@@ -30,6 +32,7 @@ class ScanDB(Base):
     selected_stages = Column(JSON, default=list)
     state = Column(Enum(ScanState), default=ScanState.CREATED, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     jenkins_build_number = Column(String, nullable=True)
@@ -41,7 +44,7 @@ class ScanDB(Base):
     error_type = Column(String, nullable=True)  # e.g., "PIPELINE_ERROR", "SECURITY_ISSUE"
     jenkins_console_url = Column(String, nullable=True)  # Direct link to Jenkins logs
     retry_count = Column(Integer, default=0, nullable=False)  # Number of retries
-    
+
     # Index for faster active scan lookups
     __table_args__ = (
         Index('ix_scans_project_state', 'project_id', 'state'),
@@ -53,3 +56,5 @@ class UserDB(Base):
     id = Column(String, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

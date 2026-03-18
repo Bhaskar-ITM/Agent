@@ -58,9 +58,9 @@ const ProjectControlPage = () => {
       setError(null);
       const scan = await api.scans.trigger(projectId, 'automated');
       navigate(`/scans/${scan.scan_id}`);
-    } catch (_: any) {
-      const detail = 'Failed to trigger scan';
-      setError(detail);
+    } catch (error) {
+      const message = ApiError.getErrorMessage(error, 'Failed to trigger scan');
+      setError(message);
       setIsTriggering(false);
       setShowConfirm(false);
     }
