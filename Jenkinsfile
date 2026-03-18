@@ -198,9 +198,54 @@ pipeline {
             when { expression { shouldRun('docker_build') } }
             steps {
                 script {
-                    IMAGE_TAG = "${PROJECT.project_id ?: 'scan'}:${params.SCAN_ID}"
-                    sh "docker build -t ${IMAGE_TAG} . || true"
-                    recordStage('docker_build', 'PASS', 'Docker image built')
+                    // Auto-detect Dockerfile with priority order
+                    def dockerfile = ''
+                    def context = '.'
+                    
+                    // Check common locations in priority order
+                    def locations = [
+                        [file: 'Dockerfile', context: '.'],
+                        [file: 'docker/Dockerfile', context: '.'],
+                        [file: 'backend/Dockerfile', context: 'backend'],
+                        [file: 'frontend/Dockerfile', context: 'frontend'],
+                        [file: 'api/Dockerfile', context: 'api'],
+                        [file: 'app/Dockerfile', context: 'app'],
+                        [file: 'server/Dockerfile', context: 'server'],
+                        [file: 'web/Dockerfile', context: 'web'],
+                    ]
+                    
+                    for (loc in locations) {
+                        if (fileExists(loc.file)) {
+                            dockerfile = loc.file
+                            context = loc.context
+                            echo "✓ Using ${dockerfile} (context: ${context})"
+                            break
+                        }
+                    }
+                    
+                    // Fallback to find command if not in common locations
+                    if (!dockerfile) {
+                        def output = sh(
+                            script: "find . -name 'Dockerfile*' -type f | head -1",
+                            returnStdout: true
+                        ).trim()
+                        if (output) {
+                            dockerfile = output
+                            context = output.contains('/') ? 
+                                output.substring(0, output.lastIndexOf('/')) : '.'
+                            echo "✓ Found via find: ${dockerfile} (context: ${context})"
+                        }
+                    }
+                    
+                    // Build or skip
+                    if (dockerfile) {
+                        IMAGE_TAG = "${PROJECT.project_id ?: 'scan'}:${params.SCAN_ID}"
+                        sh "docker build -t ${IMAGE_TAG} -f ${dockerfile} ${context}"
+                        recordStage('docker_build', 'PASS', 'Built from ${dockerfile}')
+                    } else {
+                        echo "⚠️  No Dockerfile found - skipping Docker build"
+                        recordStage('docker_build', 'SKIPPED', 'No Dockerfile found')
+                    }
                 }
             }
         }
