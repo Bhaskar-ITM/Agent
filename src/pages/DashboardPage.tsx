@@ -153,8 +153,25 @@ const DashboardPage = () => {
   const { connected: wsConnected } = useScanWebSocket(undefined, undefined, {
     onMessage: (message) => {
       console.log('Dashboard real-time update received:', message);
-      // Invalidate projects query to fetch latest states
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      // Performance Optimization (Bolt ⚡): Surgical cache update avoids redundant API call
+      // and preserves object references for React.memo optimization.
+      queryClient.setQueryData(['projects'], (oldProjects: Project[] | undefined) => {
+        if (!oldProjects) return oldProjects;
+        return oldProjects.map(p => {
+          if (p.project_id === message.project_id) {
+            // Only update if state or scan ID actually changed to prevent redundant re-renders
+            if (p.last_scan_state === message.data.state && p.last_scan_id === message.scan_id) {
+              return p;
+            }
+            return {
+              ...p,
+              last_scan_state: message.data.state,
+              last_scan_id: message.scan_id,
+            };
+          }
+          return p;
+        });
+      });
     },
     onOpen: () => {
       console.log('Dashboard WebSocket connected');

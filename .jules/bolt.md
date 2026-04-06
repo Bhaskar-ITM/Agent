@@ -36,3 +36,11 @@
 ## 2026-03-02 - Optimized list_scans N+1 queries and batch commits
 **Learning:** The `list_scans` endpoint previously triggered an individual project lookup for every scan to check for timeouts, leading to an N+1 query bottleneck. Additionally, every timed-out scan triggered a separate `db.commit()`, causing significant I/O overhead.
 **Action:** Use batch project fetching (`.in_(project_ids)`) to resolve N+1 queries. Refactor timeout helpers to support an `auto_commit=False` flag, allowing all scan state transitions to be persisted in a single database transaction at the end of the loop.
+
+## 2026-03-05 - Hook Order for Adaptive Polling
+**Learning:** To enable adaptive polling in TanStack Query based on WebSocket status (e.g., in `ScanStatusPage.tsx`), the `useScanWebSocket` hook must be declared *before* the `useQuery` hook. This ensures that the `wsConnected` state is available during the query's initialization and subsequent evaluations of the `refetchInterval` function.
+**Action:** Always place real-time connection hooks (WebSocket, SSE) before data-fetching hooks if the fetching logic depends on the connection state.
+
+## 2026-03-05 - Risks of SQLAlchemy Batch Deletion
+**Learning:** Using `db.query(...).delete()` (batch deletion) in SQLAlchemy is significantly faster but bypasses all ORM-level lifecycle hooks and `cascade="all, delete-orphan"` relationships. In this codebase, where `ScanDB` might have complex relationships, this can lead to data integrity issues.
+**Action:** Stick to explicit loops with `db.delete(obj)` for entities with complex relationships unless database-level `ON DELETE CASCADE` is explicitly confirmed and verified.
