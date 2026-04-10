@@ -71,6 +71,13 @@ class JenkinsService:
             ),  # Dynamic timeout
         }
 
+        # DEBUG: Log the exact payload being sent
+        logger.info("=" * 60)
+        logger.info(f"JENKINS TRIGGER - scan_id: {scan.scan_id}")
+        logger.info(f"JENKINS TRIGGER - scan_mode: {scan.scan_mode}")
+        logger.info(f"JENKINS TRIGGER - FULL PAYLOAD: {payload}")
+        logger.info("=" * 60)
+
         # Centralized outbound call via standardized JenkinsClient
         try:
             logger.info(f"Triggering Jenkins job for scan {scan.scan_id}")

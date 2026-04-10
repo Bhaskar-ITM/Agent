@@ -49,6 +49,13 @@ class JenkinsClient:
         logger.info(
             f"[JENKINS] Triggering pipeline '{job_name}' with params: {parameters}"
         )
+
+        # DEBUG: Log each parameter individually
+        for key, value in parameters.items():
+            logger.info(
+                f"[JENKINS] Parameter {key}: {value} (type: {type(value).__name__})"
+            )
+
         try:
             # Get CSRF token for POST requests
             csrf_token = self._get_csrf_token()
