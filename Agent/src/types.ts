@@ -21,6 +21,7 @@ export type Project = {
   target_ip?: string;
   target_url?: string;
   last_scan_state?: string;
+  last_scan_id?: string;
 };
 
 export type Scan = {
@@ -33,6 +34,9 @@ export type Scan = {
   started_at?: string;
   finished_at?: string;
   results?: ScanStage[];
+  retry_count?: number | string;
+  jenkins_build_number?: number | string;
+  jenkins_queue_id?: string;
 };
 
 // Backend stage IDs (snake_case) - used in API calls

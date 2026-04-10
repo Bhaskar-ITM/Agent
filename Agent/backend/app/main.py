@@ -51,6 +51,11 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+from app.services.scan_recovery import run_recovery_task
+import threading
+
+...
+
 @app.on_event("startup")
 def validate_configuration():
     if not settings.DATABASE_URL:
@@ -64,6 +69,10 @@ def validate_configuration():
 
     # Initialize DB schema
     Base.metadata.create_all(bind=engine)
+
+    # Start scan recovery background task (Phase 1.3)
+    threading.Thread(target=run_recovery_task, daemon=True).start()
+    logger.info("Started scan recovery background task")
 
 # Auth routes are public - no authentication required
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])

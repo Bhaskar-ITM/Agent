@@ -4,6 +4,7 @@ from sqlalchemy import Column, String, DateTime, Enum, JSON
 from app.core.db import Base
 from app.state.scan_state import ScanState
 
+
 class ProjectDB(Base):
     __tablename__ = "projects"
 
@@ -17,6 +18,7 @@ class ProjectDB(Base):
     sonar_key = Column(String, nullable=True)
     target_ip = Column(String, nullable=True)
     target_url = Column(String, nullable=True)
+
 
 class ScanDB(Base):
     __tablename__ = "scans"
@@ -35,9 +37,12 @@ class ScanDB(Base):
     callback_digests = Column(JSON, default=list)
     # New fields for Phase 1 & 2
     error_message = Column(String, nullable=True)  # Store error details
-    error_type = Column(String, nullable=True)  # e.g., "PIPELINE_ERROR", "SECURITY_ISSUE"
+    error_type = Column(
+        String, nullable=True
+    )  # e.g., "PIPELINE_ERROR", "SECURITY_ISSUE"
     jenkins_console_url = Column(String, nullable=True)  # Direct link to Jenkins logs
     retry_count = Column(String, default="0", nullable=False)  # Number of retries
+
 
 class UserDB(Base):
     __tablename__ = "users"

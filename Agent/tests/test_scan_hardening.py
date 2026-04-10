@@ -227,3 +227,46 @@ def test_running_scan_times_out_when_window_exceeded(client, mock_celery_task):
     assert status_response.status_code == 200
     assert status_response.json()["state"] == "FAILED"
 
+
+def test_reset_scan_increments_retry_count_and_clears_state(client, mock_celery_task):
+    """Test that resetting a scan increments retry_count and clears failure state"""
+    project_id = _create_project(client)
+    scan_response = client.post(
+        "/api/v1/scans",
+        json={"project_id": project_id, "scan_mode": "automated"},
+    )
+    scan_id = scan_response.json()["scan_id"]
+
+    # 1. Manually mark as FAILED with some results and error
+    db = SessionLocal()
+    try:
+        scan = db.query(ScanDB).filter(ScanDB.scan_id == scan_id).first()
+        scan.state = ScanState.FAILED
+        scan.error_message = "Test failure"
+        scan.stage_results = [{"stage": "git_checkout", "status": "PASS"}]
+        db.commit()
+    finally:
+        db.close()
+
+    # 2. Call Reset API
+    reset_response = client.post(
+        f"/api/v1/scans/{scan_id}/reset",
+        headers={"X-API-Key": "z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4"}
+    )
+    assert reset_response.status_code == 200
+    data = reset_response.json()
+
+    # 3. Verify state is reset and retry_count is 1
+    assert data["state"] == "CREATED"
+    assert data["retry_count"] == 1
+    assert data["error"] is None
+    assert data["results"] == []
+
+    # 4. Verify project state is also reset
+    db = SessionLocal()
+    try:
+        project = db.query(ProjectDB).filter(ProjectDB.project_id == project_id).first()
+        assert project.last_scan_state == "CREATED"
+    finally:
+        db.close()
+

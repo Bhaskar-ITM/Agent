@@ -11,10 +11,11 @@ from app.schemas.token import TokenData
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
+
 def get_current_user(
     request: Request,
     token: str | None = Security(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if settings.ENV == "test":
         return type("User", (), {"username": "test-bypass"})()
@@ -39,9 +40,11 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     try:
-        payload = jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
+        payload = jwt.decode(
+            token, security.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
@@ -52,4 +55,13 @@ def get_current_user(
     user = db.query(UserDB).filter(UserDB.username == token_data.username).first()
     if user is None:
         raise credentials_exception
+    return user
+
+
+def require_admin(user: UserDB = Depends(get_current_user)):
+    """Dependency to require admin role"""
+    if getattr(user, "role", "user") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
+        )
     return user

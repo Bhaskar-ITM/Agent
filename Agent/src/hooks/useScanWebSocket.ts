@@ -46,8 +46,8 @@ export function useScanWebSocket(
     onError,
     onOpen,
     onClose,
-    reconnectInterval = 3000,
-    maxReconnectAttempts = 5,
+    reconnectInterval = 2000,
+    maxReconnectAttempts = 10,
   } = options;
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -56,49 +56,56 @@ export function useScanWebSocket(
   const isManualClose = useRef(false);
 
   const connect = useCallback(() => {
-    if (!scanId && !projectId) return;
+    function establishConnection() {
+      if (!scanId && !projectId) return;
 
-    // Build WebSocket URL with query parameters
-    const wsUrl = new URL('/api/v1/ws/scans', window.location.origin);
-    if (scanId) wsUrl.searchParams.set('scan_id', scanId);
-    if (projectId) wsUrl.searchParams.set('project_id', projectId);
+      // Build WebSocket URL with query parameters
+      const wsUrl = new URL('/api/v1/ws/scans', window.location.origin);
+      if (scanId) wsUrl.searchParams.set('scan_id', scanId);
+      if (projectId) wsUrl.searchParams.set('project_id', projectId);
 
-    const ws = new WebSocket(wsUrl.toString());
+      const ws = new WebSocket(wsUrl.toString());
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      reconnectCountRef.current = 0;
-      onOpen?.();
-    };
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        reconnectCountRef.current = 0;
+        onOpen?.();
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data);
-        console.log('WebSocket message received:', message);
-        onMessage?.(message);
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
+      ws.onmessage = (event) => {
+        if (event.data === 'pong') return;
+        try {
+          const message: WebSocketMessage = JSON.parse(event.data);
+          console.log('WebSocket message received:', message);
+          onMessage?.(message);
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
+      };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      onError?.(error);
-    };
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        onError?.(error);
+      };
 
-    ws.onclose = () => {
-      console.log('WebSocket closed');
-      onClose?.();
+      ws.onclose = () => {
+        console.log('WebSocket closed');
+        onClose?.();
 
-      // Auto-reconnect if not manually closed
-      if (!isManualClose.current && reconnectCountRef.current < maxReconnectAttempts) {
-        reconnectCountRef.current += 1;
-        console.log(`Reconnecting in ${reconnectInterval}ms (attempt ${reconnectCountRef.current}/${maxReconnectAttempts})`);
-        reconnectTimerRef.current = setTimeout(connect, reconnectInterval);
-      }
-    };
+        // Auto-reconnect if not manually closed
+        if (!isManualClose.current && reconnectCountRef.current < maxReconnectAttempts) {
+          reconnectCountRef.current += 1;
+          // Exponential backoff: 2s, 4s, 8s, up to 10s
+          const backoff = Math.min(reconnectInterval * Math.pow(1.5, reconnectCountRef.current - 1), 10000);
+          console.log(`Reconnecting in ${backoff}ms (attempt ${reconnectCountRef.current}/${maxReconnectAttempts})`);
+          reconnectTimerRef.current = setTimeout(establishConnection, backoff);
+        }
+      };
 
-    wsRef.current = ws;
+      wsRef.current = ws;
+    }
+
+    establishConnection();
   }, [scanId, projectId, onMessage, onError, onOpen, onClose, reconnectInterval, maxReconnectAttempts]);
 
   // Connect on mount
@@ -125,7 +132,7 @@ export function useScanWebSocket(
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send('ping');
       }
-    }, 30000); // Ping every 30 seconds
+    }, 15000); // Ping every 15 seconds
 
     return () => clearInterval(pingInterval);
   }, []);
