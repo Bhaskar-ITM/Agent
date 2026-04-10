@@ -3,12 +3,62 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
-.pytest_cache/
-
-# Node
-node_modules/
-dist/
+.venv/
+env/
 .env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+*.db
 
-# Vite
+# Node/Frontend
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+dist/
+build/
+.env.local
+.env.*.local
 *.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+.cache/
+tmp/
+temp/
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# Test/Coverage
+coverage/
+htmlcov/
+.coverage
+.tox/
+
+# Build outputs
+*.css.map
+*.js.map
+
+# Misc
+storage/
+
+# Untracked Agent folder
+Agent/.agent/
+Agent/.worktrees/
