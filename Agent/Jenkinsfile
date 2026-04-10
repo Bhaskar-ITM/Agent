@@ -55,8 +55,8 @@ pipeline {
         // Use environment variable for backend URL, fallback to localhost:8000 for dev
         CALLBACK_URL = "${env.BACKEND_URL ?: 'http://localhost:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
         REPORT_DIR = "reports"
-        // Get callback token from Jenkins credentials or use default
-        CALLBACK_TOKEN = "${env.CALLBACK_TOKEN ?: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'}"
+        // Get callback token from Jenkins credentials (no fallback - fails if not set)
+        CALLBACK_TOKEN = "${env.CALLBACK_TOKEN}"
     }
 
     options {
@@ -166,6 +166,32 @@ pipeline {
                         }
                     }
                 }
+                        
+                        try {
+                            withSonarQubeEnv('sonar-server') {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      ${sonarParams.join(' ')}
+=======
+
+                        try {
+                            // Use Jenkins SonarQube server configuration
+                            withSonarQubeEnv('sonar-server') {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
+                                      -Dsonar.sources=. \
+                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}
+                                """
+                            }
+                            recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
+                        } catch (Exception e) {
+                            echo "⚠️  SonarQube failed: ${e.message}"
+                            echo "   Continuing pipeline with other security scans..."
+                            recordStage('sonar_scanner', 'WARN', "SonarQube failed: ${e.message}")
+                        }
+                    }
+                }
             }
         }
 
@@ -182,33 +208,33 @@ pipeline {
             steps {
                 // Per-stage timeout: 10 minutes for dependency installation
                 timeout(time: 10, unit: 'MINUTES') {
-                    sh """
-                        # Install Frontend dependencies
-                        if [ -f Port_Push-main/frontend/package.json ]; then
-                            cd Port_Push-main/frontend
-                            npm install
-                            cd ../..
-                        elif [ -f package.json ]; then
-                            npm install
-                        fi
-
-                        # Install Backend dependencies
-                        if [ -f Port_Push-main/backend/requirements.txt ]; then
-                            cd Port_Push-main/backend
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -r requirements.txt
-                            cd ../..
-                        elif [ -f backend/requirements.txt ]; then
-                            cd backend
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -r requirements.txt
-                            cd ..
-                        fi
-                    """
-                    recordStage('npm_pip_install', 'PASS', 'Dependencies installed')
+                    script {
+                        // Find package.json location
+                        def npmDir = sh(
+                            script: "find . -name 'package.json' -type f | head -1",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (npmDir) {
+                            dir(npmDir.replaceAll('/package.json', '')) {
+                                sh 'npm ci'
+                            }
+                        }
+                        
+                        // Find requirements.txt location  
+                        def pipDir = sh(
+                            script: "find . -name 'requirements.txt' -type f | head -1",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (pipDir) {
+                            dir(pipDir.replaceAll('/requirements.txt', '')) {
+                                sh 'pip install -r requirements.txt'
+                            }
+                        }
+                    }
                 }
+                recordStage('npm_pip_install', 'PASS', 'Dependencies installed')
             }
         }
 
@@ -265,6 +291,52 @@ pipeline {
                 }
             }
         }
+                    if (PROJECT.dependency_scan_paths) {
+                        PROJECT.dependency_scan_paths.split(',').each { path ->
+                            scanPaths << path.trim()
+                        }
+                    }
+                    
+                    // Default to root if no specific paths found
+                    if (scanPaths.empty) {
+                        scanPaths << '.'
+                    }
+                    
+                    // Remove duplicates
+                    scanPaths = scanPaths.unique()
+                    
+                    def scanParams = [
+                        "--project ${params.SCAN_ID}",
+                        "--format JSON",
+                        "--format HTML",
+                        "--out ${env.REPORT_DIR}"
+                    ]
+                    
+                    // Add scan paths
+                    scanPaths.each { path ->
+                        scanParams << "--scan ${path}"
+                    }
+                    
+                    // Add exclusion patterns if configured
+                    if (PROJECT.dependency_exclusions) {
+                        scanParams << "--exclude ${PROJECT.dependency_exclusions}"
+                    }
+                    
+                    dependencyCheck additionalArguments: scanParams.join(' '), odcInstallation: 'OWasp'
+                    recordStage('dependency_check', 'PASS', 'Dependency check completed')
+                }
+=======
+                dependencyCheck additionalArguments: """
+                    --project ${params.SCAN_ID}
+                    --scan .
+                    --format JSON
+                    --format HTML
+                    --out ${env.REPORT_DIR}
+                    --enableExperimental
+                """, odcInstallation: 'OWasp'
+                recordStage('dependency_check', 'PASS', 'Dependency check completed')
+            }
+        }
 
         stage('6. Trivy FS Scan') {
             when { expression { shouldRun('trivy_fs_scan') } }
@@ -281,9 +353,54 @@ pipeline {
             when { expression { shouldRun('docker_build') } }
             steps {
                 script {
-                    IMAGE_TAG = "${PROJECT.project_id ?: 'scan'}:${params.SCAN_ID}"
-                    sh "docker build -t ${IMAGE_TAG} . || true"
-                    recordStage('docker_build', 'PASS', 'Docker image built')
+                    // Auto-detect Dockerfile with priority order
+                    def dockerfile = ''
+                    def context = '.'
+                    
+                    // Check common locations in priority order
+                    def locations = [
+                        [file: 'Dockerfile', context: '.'],
+                        [file: 'docker/Dockerfile', context: '.'],
+                        [file: 'backend/Dockerfile', context: 'backend'],
+                        [file: 'frontend/Dockerfile', context: 'frontend'],
+                        [file: 'api/Dockerfile', context: 'api'],
+                        [file: 'app/Dockerfile', context: 'app'],
+                        [file: 'server/Dockerfile', context: 'server'],
+                        [file: 'web/Dockerfile', context: 'web'],
+                    ]
+                    
+                    for (loc in locations) {
+                        if (fileExists(loc.file)) {
+                            dockerfile = loc.file
+                            context = loc.context
+                            echo "✓ Using ${dockerfile} (context: ${context})"
+                            break
+                        }
+                    }
+                    
+                    // Fallback to find command if not in common locations
+                    if (!dockerfile) {
+                        def output = sh(
+                            script: "find . -name 'Dockerfile*' -type f | head -1",
+                            returnStdout: true
+                        ).trim()
+                        if (output) {
+                            dockerfile = output
+                            context = output.contains('/') ? 
+                                output.substring(0, output.lastIndexOf('/')) : '.'
+                            echo "✓ Found via find: ${dockerfile} (context: ${context})"
+                        }
+                    }
+                    
+                    // Build or skip
+                    if (dockerfile) {
+                        IMAGE_TAG = "${PROJECT.project_id ?: 'scan'}:${params.SCAN_ID}"
+                        sh "docker build -t ${IMAGE_TAG} -f ${dockerfile} ${context}"
+                        recordStage('docker_build', 'PASS', 'Built from ${dockerfile}')
+                    } else {
+                        echo "⚠️  No Dockerfile found - skipping Docker build"
+                        recordStage('docker_build', 'SKIPPED', 'No Dockerfile found')
+                    }
                 }
             }
         }
