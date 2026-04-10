@@ -12,3 +12,6 @@ dist/
 
 # Vite
 *.log
+
+# Git worktrees
+.worktrees/

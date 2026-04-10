@@ -298,3 +298,8 @@ The pipeline integrates with Kali Linux security tools:
 - Fixed Jenkins callback to include error details
 - Enhanced backend to store and return error information
 - Improved UI error display with failed stage highlighting
+
+## Qwen Added Memories
+- User has a local Jenkins server ready for use with all configurations set up
+- Jenkins server URL: http://localhost:8080/job/Security-pipeline/ - requires authentication (403 Forbidden without credentials)
+- Docker staging rebuild command: `cd Agent && docker compose -f docker/docker-compose.yml -f docker/docker-compose.staging.yml --env-file .env.staging down --volumes --remove-orphans` then `up --build -d`, wait 2-3 minutes for health checks, verify with `docker compose ps` showing all containers healthy/running
