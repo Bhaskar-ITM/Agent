@@ -6,6 +6,89 @@ import groovy.transform.Field
 @Field def IS_MANUAL = false
 @Field def IMAGE_TAG = ''
 
+// Dynamic dependency detection function - finds all package manager files in repo
+def findDependencyFiles() {
+    def dependencies = [
+        npm: [],
+        pip: [],
+        yarn: [],
+        poetry: []
+    ]
+    
+    // Search for dependency files in entire repository
+    sh "find . -type f -name 'package.json' 2>/dev/null > npm_files.txt"
+    sh "find . -type f -name 'requirements.txt' 2>/dev/null > pip_files.txt"
+    sh "find . -type f -name 'yarn.lock' 2>/dev/null > yarn_files.txt"
+    sh "find . -type f -name 'pyproject.toml' 2>/dev/null > poetry_files.txt"
+    
+    if (fileExists('npm_files.txt')) {
+        dependencies.npm = readFile('npm_files.txt').split('\n').findAll { it.trim() }
+    }
+    if (fileExists('pip_files.txt')) {
+        dependencies.pip = readFile('pip_files.txt').split('\n').findAll { it.trim() }
+    }
+    if (fileExists('yarn_files.txt')) {
+        dependencies.yarn = readFile('yarn_files.txt').split('\n').findAll { it.trim() }
+    }
+    if (fileExists('poetry_files.txt')) {
+        dependencies.poetry = readFile('poetry_files.txt').split('\n').findAll { it.trim() }
+    }
+    
+    // Cleanup temporary files
+    sh "rm -f npm_files.txt pip_files.txt yarn_files.txt poetry_files.txt 2>/dev/null"
+    
+    echo "DEBUG: Found npm: ${dependencies.npm.size()}, pip: ${dependencies.pip.size()}, yarn: ${dependencies.yarn.size()}, poetry: ${dependencies.poetry.size()}"
+    
+    return dependencies
+}
+
+// Get unique scan paths from dependency files
+def getDependencyScanPaths() {
+    def dependencies = findDependencyFiles()
+    def scanPaths = []
+    
+    // Add directory containing each npm package.json
+    dependencies.npm.each { file ->
+        def dir = new File(file).getParent()
+        if (dir && !scanPaths.contains(dir)) {
+            scanPaths << dir
+        }
+    }
+    
+    // Add directory containing each pip requirements.txt
+    dependencies.pip.each { file ->
+        def dir = new File(file).getParent()
+        if (dir && !scanPaths.contains(dir)) {
+            scanPaths << dir
+        }
+    }
+    
+    // Add directories from yarn
+    dependencies.yarn.each { file ->
+        def dir = new File(file).getParent()
+        if (dir && !scanPaths.contains(dir)) {
+            scanPaths << dir
+        }
+    }
+    
+    // Add directories from poetry
+    dependencies.poetry.each { file ->
+        def dir = new File(file).getParent()
+        if (dir && !scanPaths.contains(dir)) {
+            scanPaths << dir
+        }
+    }
+    
+    // Default to root if no specific paths found
+    if (scanPaths.isEmpty()) {
+        scanPaths << '.'
+    }
+    
+    echo "DEBUG: Dependency scan paths: ${scanPaths.join(', ')}"
+    
+    return scanPaths
+}
+
 pipeline {
     agent any
 
@@ -171,15 +254,34 @@ pipeline {
         stage('5. Dependency Check') {
             when { expression { shouldRun('dependency_check') } }
             steps {
-                dependencyCheck additionalArguments: """
-                    --project ${params.SCAN_ID}
-                    --scan .
-                    --format JSON
-                    --format HTML
-                    --out ${env.REPORT_DIR}
-                    --enableExperimental
-                """, odcInstallation: 'OWasp'
-                recordStage('dependency_check', 'PASS', 'Dependency check completed')
+                script {
+                    // Auto-detect dependency files and get scan paths
+                    def scanPaths = getDependencyScanPaths()
+                    
+                    // Build OWASP Dependency-Check arguments
+                    def scanArgs = [
+                        "--project ${params.SCAN_ID}",
+                        "--format JSON",
+                        "--format HTML",
+                        "--out ${env.REPORT_DIR}",
+                        "--enableExperimental"
+                    ]
+                    
+                    // Add each scan path
+                    scanPaths.each { path ->
+                        scanArgs << "--scan ${path}"
+                    }
+                    
+                    // Add custom exclusions from project config if available
+                    if (PROJECT.dependency_exclusions) {
+                        scanArgs << "--exclude ${PROJECT.dependency_exclusions}"
+                    }
+                    
+                    echo "DEBUG: Running OWASP Dependency-Check with paths: ${scanPaths.join(', ')}"
+                    
+                    dependencyCheck additionalArguments: scanArgs.join(' '), odcInstallation: 'OWasp'
+                    recordStage('dependency_check', 'PASS', 'Dependency check completed for: ' + scanPaths.join(', '))
+                }
             }
         }
 
