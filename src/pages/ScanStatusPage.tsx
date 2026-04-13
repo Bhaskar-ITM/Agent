@@ -29,6 +29,27 @@ const ScanStatusPage = () => {
     setExpandedStages(prev => ({ ...prev, [stageId]: !prev[stageId] }));
   };
 
+  const resetMutation = useScanReset();
+  const cancelMutation = useScanCancel();
+
+  // Track last updated time for display
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  // Performance Optimization (Bolt ⚡): Hook declared before useQuery so wsConnected is available
+  // for adaptive polling back-off logic.
+  const { connected: wsConnected, connecting: wsConnecting } = useScanWebSocket(scanId, undefined, {
+    onMessage: (message) => {
+      console.log('Scan real-time update received:', message);
+      // Performance Optimization (Bolt ⚡): Surgical cache update via WebSocket message
+      // eliminates the need for an immediate HTTP refetch.
+      queryClient.setQueryData(['scan', scanId], {
+        scan: message.data,
+        stages: message.data.results || []
+      });
+      setLastUpdated(new Date());
+    }
+  });
+
   const { data: scanData, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['scan', scanId],
     queryFn: async () => {
@@ -36,12 +57,14 @@ const ScanStatusPage = () => {
       const scan = await api.scans.get(scanId);
       return { scan, stages: scan?.results || [] };
     },
+    // Performance Optimization (Bolt ⚡): Adaptive polling.
+    // Back off from 3s to 15s if WebSocket is connected, reducing redundant network noise.
     refetchInterval: (query) => {
       const data = query.state.data as any;
       if (data?.scan && ['COMPLETED', 'FAILED', 'CANCELLED'].includes(data.scan.state)) {
         return false;
       }
-      return 3000;
+      return wsConnected ? 15000 : 3000;
     },
     enabled: !!scanId,
   });
@@ -54,24 +77,6 @@ const ScanStatusPage = () => {
       setShowErrorModal(true);
     }
   }, [scan?.state]);
-
-  const resetMutation = useScanReset();
-  const cancelMutation = useScanCancel();
-
-  // Track last updated time for display
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-
-  const { connected: wsConnected, connecting: wsConnecting } = useScanWebSocket(scanId, undefined, {
-    onMessage: (message) => {
-      console.log('Scan real-time update received:', message);
-      // Update cache directly instead of refetching
-      queryClient.setQueryData(['scan', scanId], {
-        scan: message.data,
-        stages: message.data.results || []
-      });
-      setLastUpdated(new Date());
-    }
-  });
 
   // Update lastUpdated on successful refetch
   useEffect(() => {

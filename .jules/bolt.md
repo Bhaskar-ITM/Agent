@@ -36,3 +36,7 @@
 ## 2026-03-02 - Optimized list_scans N+1 queries and batch commits
 **Learning:** The `list_scans` endpoint previously triggered an individual project lookup for every scan to check for timeouts, leading to an N+1 query bottleneck. Additionally, every timed-out scan triggered a separate `db.commit()`, causing significant I/O overhead.
 **Action:** Use batch project fetching (`.in_(project_ids)`) to resolve N+1 queries. Refactor timeout helpers to support an `auto_commit=False` flag, allowing all scan state transitions to be persisted in a single database transaction at the end of the loop.
+
+## 2026-04-13 - Surgical Cache Updates and Adaptive Polling
+**Learning:** High-frequency polling and real-time WebSocket updates can conflict, leading to redundant network requests and state thrashing. Full query invalidations on WebSocket messages trigger immediate HTTP refetches, which is often unnecessary if the message contains the updated data.
+**Action:** Implement surgical cache updates using `queryClient.setQueryData` to apply WebSocket updates directly to the TanStack Query cache. Combine this with adaptive polling that increases the `refetchInterval` (back-off) when the WebSocket is connected (`wsConnected`), significantly reducing network noise while maintaining data freshness.
