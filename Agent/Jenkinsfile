@@ -325,7 +325,6 @@ pipeline {
                     dependencyCheck additionalArguments: scanParams.join(' '), odcInstallation: 'OWasp'
                     recordStage('dependency_check', 'PASS', 'Dependency check completed')
                 }
-=======
                 dependencyCheck additionalArguments: """
                     --project ${params.SCAN_ID}
                     --scan .
