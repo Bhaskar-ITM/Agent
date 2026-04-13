@@ -6,7 +6,7 @@ import groovy.transform.Field
 @Field def IS_MANUAL = false
 @Field def IMAGE_TAG = ''
 
-// Dynamic dependency detection function - finds all package manager files in repo
+// Dynamic dependency detection function
 def findDependencyFiles() {
     def dependencies = [
         npm: [],
@@ -37,56 +37,7 @@ def findDependencyFiles() {
     // Cleanup temporary files
     sh "rm -f npm_files.txt pip_files.txt yarn_files.txt poetry_files.txt 2>/dev/null"
     
-    echo "DEBUG: Found npm: ${dependencies.npm.size()}, pip: ${dependencies.pip.size()}, yarn: ${dependencies.yarn.size()}, poetry: ${dependencies.poetry.size()}"
-    
     return dependencies
-}
-
-// Get unique scan paths from dependency files
-def getDependencyScanPaths() {
-    def dependencies = findDependencyFiles()
-    def scanPaths = []
-    
-    // Add directory containing each npm package.json
-    dependencies.npm.each { file ->
-        def dir = new File(file).getParent()
-        if (dir && !scanPaths.contains(dir)) {
-            scanPaths << dir
-        }
-    }
-    
-    // Add directory containing each pip requirements.txt
-    dependencies.pip.each { file ->
-        def dir = new File(file).getParent()
-        if (dir && !scanPaths.contains(dir)) {
-            scanPaths << dir
-        }
-    }
-    
-    // Add directories from yarn
-    dependencies.yarn.each { file ->
-        def dir = new File(file).getParent()
-        if (dir && !scanPaths.contains(dir)) {
-            scanPaths << dir
-        }
-    }
-    
-    // Add directories from poetry
-    dependencies.poetry.each { file ->
-        def dir = new File(file).getParent()
-        if (dir && !scanPaths.contains(dir)) {
-            scanPaths << dir
-        }
-    }
-    
-    // Default to root if no specific paths found
-    if (scanPaths.isEmpty()) {
-        scanPaths << '.'
-    }
-    
-    echo "DEBUG: Dependency scan paths: ${scanPaths.join(', ')}"
-    
-    return scanPaths
 }
 
 pipeline {
@@ -186,6 +137,42 @@ pipeline {
                     script {
                         // Get the SonarQube Scanner tool path
                         def scannerHome = tool 'sonar-scanner'
+                        def dependencies = findDependencyFiles()
+                        
+                        // Configure Sonar based on detected dependencies and configuration
+                        def sonarParams = [
+                            "-Dsonar.projectKey=${PROJECT.sonar_project_key ?: PROJECT.sonar_key ?: params.SCAN_ID}",
+                            "-Dsonar.sources=${PROJECT.sonar_sources ?: '.'}",
+                            "-Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}"
+                        ]
+                        
+                        // Add exclusion patterns if configured
+                        if (PROJECT.sonar_exclusions) {
+                            sonarParams << "-Dsonar.exclusions=${PROJECT.sonar_exclusions}"
+                        }
+                        
+                        try {
+                            withSonarQubeEnv('sonar-server') {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      ${sonarParams.join(' ')}
+                                """
+                            }
+                            recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
+                        } catch (Exception e) {
+                            echo "⚠️  SonarQube failed: ${e.message}"
+                            echo "   Continuing pipeline with other security scans..."
+                            recordStage('sonar_scanner', 'WARN', "SonarQube failed: ${e.message}")
+                        }
+                    }
+                }
+                        
+                        try {
+                            withSonarQubeEnv('sonar-server') {
+                                sh """
+                                    ${scannerHome}/bin/sonar-scanner \
+                                      ${sonarParams.join(' ')}
+=======
 
                         try {
                             // Use Jenkins SonarQube server configuration
@@ -255,33 +242,98 @@ pipeline {
             when { expression { shouldRun('dependency_check') } }
             steps {
                 script {
-                    // Auto-detect dependency files and get scan paths
-                    def scanPaths = getDependencyScanPaths()
+                    def dependencies = findDependencyFiles()
+                    def scanPaths = []
                     
-                    // Build OWASP Dependency-Check arguments
-                    def scanArgs = [
+                    // Determine scan paths based on detected dependencies
+                    dependencies.npm.each { npmFile ->
+                        scanPaths << new File(npmFile).getParent()
+                    }
+                    
+                    dependencies.pip.each { pipFile ->
+                        scanPaths << new File(pipFile).getParent()
+                    }
+                    
+                    // Add custom scan paths if configured
+                    if (PROJECT.dependency_scan_paths) {
+                        PROJECT.dependency_scan_paths.split(',').each { path ->
+                            scanPaths << path.trim()
+                        }
+                    }
+                    
+                    // Default to root if no specific paths found
+                    if (scanPaths.empty) {
+                        scanPaths << '.'
+                    }
+                    
+                    // Remove duplicates
+                    scanPaths = scanPaths.unique()
+                    
+                    def scanParams = [
                         "--project ${params.SCAN_ID}",
                         "--format JSON",
                         "--format HTML",
-                        "--out ${env.REPORT_DIR}",
-                        "--enableExperimental"
+                        "--out ${env.REPORT_DIR}"
                     ]
                     
-                    // Add each scan path
+                    // Add scan paths
                     scanPaths.each { path ->
-                        scanArgs << "--scan ${path}"
+                        scanParams << "--scan ${path}"
                     }
                     
-                    // Add custom exclusions from project config if available
+                    // Add exclusion patterns if configured
                     if (PROJECT.dependency_exclusions) {
-                        scanArgs << "--exclude ${PROJECT.dependency_exclusions}"
+                        scanParams << "--exclude ${PROJECT.dependency_exclusions}"
                     }
                     
-                    echo "DEBUG: Running OWASP Dependency-Check with paths: ${scanPaths.join(', ')}"
-                    
-                    dependencyCheck additionalArguments: scanArgs.join(' '), odcInstallation: 'OWasp'
-                    recordStage('dependency_check', 'PASS', 'Dependency check completed for: ' + scanPaths.join(', '))
+                    dependencyCheck additionalArguments: scanParams.join(' '), odcInstallation: 'OWasp'
+                    recordStage('dependency_check', 'PASS', 'Dependency check completed')
                 }
+            }
+        }
+                    if (PROJECT.dependency_scan_paths) {
+                        PROJECT.dependency_scan_paths.split(',').each { path ->
+                            scanPaths << path.trim()
+                        }
+                    }
+                    
+                    // Default to root if no specific paths found
+                    if (scanPaths.empty) {
+                        scanPaths << '.'
+                    }
+                    
+                    // Remove duplicates
+                    scanPaths = scanPaths.unique()
+                    
+                    def scanParams = [
+                        "--project ${params.SCAN_ID}",
+                        "--format JSON",
+                        "--format HTML",
+                        "--out ${env.REPORT_DIR}"
+                    ]
+                    
+                    // Add scan paths
+                    scanPaths.each { path ->
+                        scanParams << "--scan ${path}"
+                    }
+                    
+                    // Add exclusion patterns if configured
+                    if (PROJECT.dependency_exclusions) {
+                        scanParams << "--exclude ${PROJECT.dependency_exclusions}"
+                    }
+                    
+                    dependencyCheck additionalArguments: scanParams.join(' '), odcInstallation: 'OWasp'
+                    recordStage('dependency_check', 'PASS', 'Dependency check completed')
+                }
+                dependencyCheck additionalArguments: """
+                    --project ${params.SCAN_ID}
+                    --scan .
+                    --format JSON
+                    --format HTML
+                    --out ${env.REPORT_DIR}
+                    --enableExperimental
+                """, odcInstallation: 'OWasp'
+                recordStage('dependency_check', 'PASS', 'Dependency check completed')
             }
         }
 
