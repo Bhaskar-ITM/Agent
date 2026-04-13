@@ -98,14 +98,13 @@ pipeline {
         text(name: 'PROJECT_DATA', defaultValue: '{}')
         text(name: 'SELECTED_STAGES', defaultValue: '[]')
         text(name: 'SCAN_TIMEOUT', defaultValue: '7200')  // Dynamic timeout in seconds
+        string(name: 'CALLBACK_TOKEN', defaultValue: '', description: 'Callback token for backend auth')
     }
 
     environment {
         // Use environment variable for backend URL, fallback to localhost:8000 for dev
-        CALLBACK_URL = "${env.BACKEND_URL ?: 'http://localhost:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
+        CALLBACK_URL = "${env.BACKEND_URL ?: 'http://backend:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
         REPORT_DIR = "reports"
-        // Get callback token from Jenkins credentials (no fallback - fails if not set)
-        CALLBACK_TOKEN = "${env.CALLBACK_TOKEN}"
     }
 
     options {
@@ -190,7 +189,7 @@ pipeline {
                         try {
                             // Use Jenkins SonarQube server configuration
                             withSonarQubeEnv('sonar-server') {
-                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.sources=. -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}"
+                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}"
                             }
                             recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                         } catch (Exception e) {
@@ -237,7 +236,7 @@ pipeline {
                         
                         if (pipDir) {
                             dir(pipDir.replaceAll('/requirements.txt', '')) {
-                                sh 'pip install -r requirements.txt'
+                                sh 'pip install --break-system-packages -r requirements.txt'
                             }
                         }
                     }
@@ -530,11 +529,11 @@ pipeline {
                 // Write callback payload to file
                 writeFile file: 'callback.json', text: groovy.json.JsonOutput.toJson(payload)
 
-                // Send callback to backend using environment CALLBACK_TOKEN
+                // Send callback to backend
                 sh """
                     curl -sS -X POST \
                       -H "Content-Type: application/json" \
-                      -H "X-Callback-Token: ${CALLBACK_TOKEN}" \
+                      -H "X-Callback-Token: ${params.CALLBACK_TOKEN}" \
                       --data @callback.json \
                       "${CALLBACK_URL}" \
                     || echo "Callback failed"
