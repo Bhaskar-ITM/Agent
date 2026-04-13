@@ -15,29 +15,33 @@ def findDependencyFiles() {
         poetry: []
     ]
     
-    // Search for dependency files in entire repository
-    sh "find . -type f -name 'package.json' 2>/dev/null > npm_files.txt"
-    sh "find . -type f -name 'requirements.txt' 2>/dev/null > pip_files.txt"
-    sh "find . -type f -name 'yarn.lock' 2>/dev/null > yarn_files.txt"
-    sh "find . -type f -name 'pyproject.toml' 2>/dev/null > poetry_files.txt"
+    // Search for dependency files in entire repository (exclude node_modules)
+    sh "find . -type f -name 'package.json' -not -path '*/node_modules/*' 2>/dev/null > npm_files.txt"
+    sh "find . -type f -name 'requirements.txt' -not -path '*/node_modules/*' 2>/dev/null > pip_files.txt"
+    sh "find . -type f -name 'yarn.lock' -not -path '*/node_modules/*' 2>/dev/null > yarn_files.txt"
+    sh "find . -type f -name 'pyproject.toml' -not -path '*/node_modules/*' 2>/dev/null > poetry_files.txt"
     
     if (fileExists('npm_files.txt')) {
-        dependencies.npm = readFile('npm_files.txt').split('\n').findAll { it.trim() }
+        def npmFiles = readFile('npm_files.txt').trim()
+        dependencies.npm = npmFiles ? npmFiles.split('\n').findAll { it.trim() } : []
     }
     if (fileExists('pip_files.txt')) {
-        dependencies.pip = readFile('pip_files.txt').split('\n').findAll { it.trim() }
+        def pipFiles = readFile('pip_files.txt').trim()
+        dependencies.pip = pipFiles ? pipFiles.split('\n').findAll { it.trim() } : []
     }
     if (fileExists('yarn_files.txt')) {
-        dependencies.yarn = readFile('yarn_files.txt').split('\n').findAll { it.trim() }
+        def yarnFiles = readFile('yarn_files.txt').trim()
+        dependencies.yarn = yarnFiles ? yarnFiles.split('\n').findAll { it.trim() } : []
     }
     if (fileExists('poetry_files.txt')) {
-        dependencies.poetry = readFile('poetry_files.txt').split('\n').findAll { it.trim() }
+        def poetryFiles = readFile('poetry_files.txt').trim()
+        dependencies.poetry = poetryFiles ? poetryFiles.split('\n').findAll { it.trim() } : []
     }
     
     // Cleanup temporary files
-    sh "rm -f npm_files.txt pip_files.txt yarn_files.txt poetry_files.txt 2>/dev/null"
+    sh "rm -f npm_files.txt pip_files.txt yarn_files.txt poetry_files.txt"
     
-    echo "DEBUG: Found npm: ${dependencies.npm.size()}, pip: ${dependencies.pip.size()}, yarn: ${dependencies.yarn.size()}, poetry: ${dependencies.poetry.size()}"
+    echo "Found dependencies: npm=${dependencies.npm.size()}, pip=${dependencies.pip.size()}, yarn=${dependencies.yarn.size()}, poetry=${dependencies.poetry.size()}"
     
     return dependencies
 }
@@ -260,6 +264,12 @@ pipeline {
                     // Auto-detect dependency files and get scan paths
                     def scanPaths = getDependencyScanPaths()
                     
+                    if (!scanPaths || scanPaths.isEmpty()) {
+                        echo "No dependency files found - skipping Dependency Check"
+                        recordStage('dependency_check', 'SKIPPED', 'No dependency files found to scan')
+                        return
+                    }
+                    
                     // Build OWASP Dependency-Check arguments
                     def scanArgs = [
                         "--project ${params.SCAN_ID}",
@@ -279,7 +289,7 @@ pipeline {
                         scanArgs << "--exclude ${PROJECT.dependency_exclusions}"
                     }
                     
-                    echo "DEBUG: Running OWASP Dependency-Check with paths: ${scanPaths.join(', ')}"
+                    echo "Running OWASP Dependency-Check with paths: ${scanPaths.join(', ')}"
                     
                     dependencyCheck additionalArguments: scanArgs.join(' '), odcInstallation: 'OWasp'
                     recordStage('dependency_check', 'PASS', 'Dependency check completed for: ' + scanPaths.join(', '))
