@@ -190,12 +190,7 @@ pipeline {
                         try {
                             // Use Jenkins SonarQube server configuration
                             withSonarQubeEnv('sonar-server') {
-                                sh """
-                                    ${scannerHome}/bin/sonar-scanner \
-                                      -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} \
-                                      -Dsonar.sources=. \
-                                      -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}
-                                """
+                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.sources=. -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}"
                             }
                             recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                         } catch (Exception e) {
