@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -147,7 +147,7 @@ def trigger_scan(
 @router.get("/scans", response_model=list[ScanResponse])
 @limiter.limit("1000/minute" if settings.ENV == "test" else "50/minute")
 def list_scans(request: Request, db: Session = Depends(get_db)):
-    """List all scans"""
+    """List all scans with timeout checking."""
     from app.api.scans.helpers import expire_scan_if_timed_out
 
     scans = db.query(ScanDB).all()
