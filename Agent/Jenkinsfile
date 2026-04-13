@@ -218,26 +218,34 @@ pipeline {
                     script {
                         // Find package.json location
                         def npmDir = sh(
-                            script: "find . -name 'package.json' -type f | head -1",
+                            script: "find . -name 'package.json' -type f 2>/dev/null | grep -v node_modules | head -1",
                             returnStdout: true
                         ).trim()
                         
-                        if (npmDir) {
+                        echo "Found package.json at: ${npmDir}"
+                        
+                        if (npmDir && npmDir != "") {
                             dir(npmDir.replaceAll('/package.json', '')) {
                                 sh 'npm ci'
                             }
+                        } else {
+                            echo "No package.json found, skipping npm install"
                         }
                         
                         // Find requirements.txt location  
                         def pipDir = sh(
-                            script: "find . -name 'requirements.txt' -type f | head -1",
+                            script: "find . -name 'requirements.txt' -type f 2>/dev/null | grep -v node_modules | head -1",
                             returnStdout: true
                         ).trim()
                         
-                        if (pipDir) {
+                        echo "Found requirements.txt at: ${pipDir}"
+                        
+                        if (pipDir && pipDir != "") {
                             dir(pipDir.replaceAll('/requirements.txt', '')) {
                                 sh 'pip install --break-system-packages -r requirements.txt'
                             }
+                        } else {
+                            echo "No requirements.txt found, skipping pip install"
                         }
                     }
                 }
