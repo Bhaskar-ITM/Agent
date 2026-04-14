@@ -321,6 +321,8 @@ pipeline {
                     def locations = [
                         [file: 'Dockerfile', context: '.'],
                         [file: 'docker/Dockerfile', context: '.'],
+                        [file: 'docker/backend.Dockerfile', context: 'docker'],
+                        [file: 'docker/frontend.Dockerfile', context: 'docker'],
                         [file: 'backend/Dockerfile', context: 'backend'],
                         [file: 'frontend/Dockerfile', context: 'frontend'],
                         [file: 'api/Dockerfile', context: 'api'],
