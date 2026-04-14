@@ -155,7 +155,7 @@ pipeline {
                     SELECTED = new ArrayList(selectedList)
                     
                     IS_MANUAL = params.SCAN_MODE == "MANUAL"
-                    sh "mkdir -p ${env.REPORT_DIR}"
+                    sh "mkdir -p \$env.REPORT_DIR"
                     
                     echo "Parsed PROJECT: ${PROJECT}"
                     echo "Parsed SELECTED: ${SELECTED}"
@@ -277,7 +277,7 @@ pipeline {
                         "--project ${params.SCAN_ID}",
                         "--format JSON",
                         "--format HTML",
-                        "--out ${env.REPORT_DIR}",
+                        "--out \$env.REPORT_DIR",
                         "--enableExperimental"
                     ]
                     
@@ -305,7 +305,7 @@ pipeline {
                 sh """
                     /home/kali_linux/.local/bin/trivy fs --format json \
                       --skip-files "reports/**" \
-                      -o ${env.REPORT_DIR}/trivy-fs.json . || true
+                      -o \$env.REPORT_DIR/trivy-fs.json . || true
                 """
                 recordStage('trivy_fs_scan', 'PASS', 'Trivy FS scan completed')
             }
@@ -415,7 +415,7 @@ pipeline {
                         echo "Scanning image: ${imageTag}"
                         sh """
                             /home/kali_linux/.local/bin/trivy image --format json \
-                              -o ${env.REPORT_DIR}/trivy-image-$(echo ${imageTag} | md5sum | cut -d' ' -f1).json ${imageTag} || true
+                              -o \$env.REPORT_DIR/trivy-image-\$(echo ${imageTag} | md5sum | cut -d' ' -f1).json ${imageTag} || true
                         """
                         scannedImages << imageTag
                     }
@@ -437,7 +437,7 @@ pipeline {
                         return
                     }
                     sh """
-                        nmap -sV -sC -oX ${env.REPORT_DIR}/nmap.xml ${PROJECT.target_ip} || true
+                        nmap -sV -sC -oX \$env.REPORT_DIR/nmap.xml \${PROJECT.target_ip} || true
                     """
                     recordStage('nmap_scan', 'PASS', 'Nmap scan completed')
                 }
