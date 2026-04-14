@@ -304,7 +304,7 @@ pipeline {
             steps {
                 sh """
                     /home/kali_linux/.local/bin/trivy fs --format json \
-                      --skip-files reports/** \
+                      --skip-files "reports/**" \
                       -o ${env.REPORT_DIR}/trivy-fs.json . || true
                 """
                 recordStage('trivy_fs_scan', 'PASS', 'Trivy FS scan completed')
@@ -443,11 +443,16 @@ pipeline {
                             ZAP_PID=$!
                             sleep 30
                             
+                            # First add URL to context (required for active scan)
+                            curl "http://127.0.0.1:8090/JSON/context/action/includeInContext/?contextName=Default&regex=.*" || true
+                            
                             # Spider scan first (passive)
                             curl "http://127.0.0.1:8090/JSON/spider/action/scan/?url=$TARGET_URL" || true
                             sleep 60
                             
-                            # Active scan to find real vulnerabilities
+                            # Active scan - use correct endpoint and add URL to sites first
+                            curl "http://127.0.0.1:8090/JSON/ascan/action/addUrl/?url=$TARGET_URL" || true
+                            sleep 5
                             curl "http://127.0.0.1:8090/JSON/ascan/action/scan/?url=$TARGET_URL&recurse=true" || true
                             sleep 120
                             
