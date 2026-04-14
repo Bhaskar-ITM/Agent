@@ -194,7 +194,7 @@ pipeline {
                             // Use Jenkins SonarQube server configuration
                             def projectName = PROJECT.project_name ?: params.SCAN_ID
                             withSonarQubeEnv('sonar-server') {
-                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.projectName=\"${projectName}\""
+                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.projectName=\"${projectName}\" -Dsonar.sourceEncoding=UTF-8 -Dsonar.exclusions=reports/**"
                             }
                             recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                         } catch (Exception e) {
@@ -232,6 +232,7 @@ pipeline {
                         if (npmDir && npmDir != "") {
                             dir(npmDir.replaceAll('/package.json', '')) {
                                 sh 'npm ci'
+                                sh 'npm audit --json > reports/npm-audit.json || true'
                             }
                         } else {
                             echo "No package.json found, skipping npm install"
@@ -303,6 +304,7 @@ pipeline {
             steps {
                 sh """
                     /home/kali_linux/.local/bin/trivy fs --format json \
+                      --skip-files reports/** \
                       -o ${env.REPORT_DIR}/trivy-fs.json . || true
                 """
                 recordStage('trivy_fs_scan', 'PASS', 'Trivy FS scan completed')
@@ -373,13 +375,21 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'docker-credentials',
                                                   usernameVariable: 'DOCKER_USER',
                                                   passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
-                        echo "${DOCKER_PASS}" | \
-                        docker login \
-                            -u "${DOCKER_USER}" --password-stdin || true
-                        docker push ${IMAGE_TAG} || true
-                    """
-                    recordStage('docker_push', 'PASS', 'Docker image pushed')
+                    script {
+                        // Construct proper Docker image name
+                        def imageName = "${DOCKER_USER}/scan-${PROJECT.project_id ?: params.SCAN_ID}".toString()
+                        def imageTag = "${imageName}:${params.SCAN_ID}".toString()
+                        
+                        // Tag the image with proper name
+                        sh "docker tag ${IMAGE_TAG} ${imageTag}"
+                        
+                        // Login and push
+                        sh '''
+                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin || exit 1
+                            docker push ''' + imageTag + ''' || { echo "Docker push failed"; exit 1; }
+                        '''
+                        recordStage('docker_push', 'PASS', 'Pushed to ' + imageTag)
+                    }
                 }
             }
         }
@@ -433,11 +443,17 @@ pipeline {
                             ZAP_PID=$!
                             sleep 30
                             
+                            # Spider scan first (passive)
                             curl "http://127.0.0.1:8090/JSON/spider/action/scan/?url=$TARGET_URL" || true
                             sleep 60
                             
-                            curl "http://127.0.0.1:8090/JSON/core/action/htmlreport/" -o reports/zap.html || true
-                            curl "http://127.0.0.1:8090/JSON/core/action/jsonreport/" -o reports/zap.json || true
+                            # Active scan to find real vulnerabilities
+                            curl "http://127.0.0.1:8090/JSON/ascan/action/scan/?url=$TARGET_URL&recurse=true" || true
+                            sleep 120
+                            
+                            # Fixed: use correct API endpoints for ZAP 2.17+
+                            curl "http://127.0.0.1:8090/OTHER/core/other/htmlreport/" -o reports/zap.html || true
+                            curl "http://127.0.0.1:8090/OTHER/core/other/jsonreport/" -o reports/zap.json || true
                             
                             kill $ZAP_PID 2>/dev/null || true
                         '''
