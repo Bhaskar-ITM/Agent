@@ -53,7 +53,7 @@ def getDependencyScanPaths() {
     
     // Add directory containing each npm package.json
     dependencies.npm.each { file ->
-        def dir = new File(file).getParent()
+        def dir = file.substring(0, file.lastIndexOf('/'))
         if (dir && !scanPaths.contains(dir)) {
             scanPaths << dir
         }
@@ -61,7 +61,7 @@ def getDependencyScanPaths() {
     
     // Add directory containing each pip requirements.txt
     dependencies.pip.each { file ->
-        def dir = new File(file).getParent()
+        def dir = file.substring(0, file.lastIndexOf('/'))
         if (dir && !scanPaths.contains(dir)) {
             scanPaths << dir
         }
@@ -69,7 +69,7 @@ def getDependencyScanPaths() {
     
     // Add directories from yarn
     dependencies.yarn.each { file ->
-        def dir = new File(file).getParent()
+        def dir = file.substring(0, file.lastIndexOf('/'))
         if (dir && !scanPaths.contains(dir)) {
             scanPaths << dir
         }
@@ -77,7 +77,7 @@ def getDependencyScanPaths() {
     
     // Add directories from poetry
     dependencies.poetry.each { file ->
-        def dir = new File(file).getParent()
+        def dir = file.substring(0, file.lastIndexOf('/'))
         if (dir && !scanPaths.contains(dir)) {
             scanPaths << dir
         }
@@ -88,8 +88,7 @@ def getDependencyScanPaths() {
         scanPaths << '.'
     }
     
-    echo "DEBUG: Dependency scan paths: ${scanPaths.join(', ')}"
-    
+    echo "Scan paths: ${scanPaths.join(', ')}"
     return scanPaths
 }
 
@@ -106,8 +105,9 @@ pipeline {
     }
 
     environment {
-        // Use environment variable for backend URL, fallback to localhost:8000 for dev
-        CALLBACK_URL = "${env.BACKEND_URL ?: 'http://backend:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
+        // Use environment variable for backend URL, fallback to host machine IP for callback
+        CALLBACK_URL = "${env.BACKEND_URL ?: 'http://192.168.1.101:8000'}/api/v1/scans/${params.SCAN_ID}/callback"
+        CALLBACK_TOKEN = "${params.CALLBACK_TOKEN ?: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'}"
         REPORT_DIR = "reports"
     }
 
@@ -192,8 +192,9 @@ pipeline {
 
                         try {
                             // Use Jenkins SonarQube server configuration
+                            def projectName = PROJECT.project_name ?: params.SCAN_ID
                             withSonarQubeEnv('sonar-server') {
-                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.projectName=${PROJECT.project_name ?: params.SCAN_ID}"
+                                sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=${PROJECT.sonar_key ?: params.SCAN_ID} -Dsonar.projectName=\"${projectName}\""
                             }
                             recordStage('sonar_scanner', 'PASS', 'Sonar scan completed')
                         } catch (Exception e) {
@@ -551,7 +552,7 @@ pipeline {
                 sh """
                     curl -sS -X POST \
                       -H "Content-Type: application/json" \
-                      -H "X-Callback-Token: ${params.CALLBACK_TOKEN}" \
+                      -H "X-Callback-Token: ${CALLBACK_TOKEN}" \
                       --data @callback.json \
                       "${CALLBACK_URL}" \
                     || echo "Callback failed"
