@@ -294,15 +294,6 @@ pipeline {
                     
                     dependencyCheck additionalArguments: scanArgs.join(' '), odcInstallation: 'OWasp'
                     recordStage('dependency_check', 'PASS', 'Dependency check completed for: ' + scanPaths.join(', '))
-                    // Record detailed result
-                    if (fileExists('${env.REPORT_DIR}/dependency-check-report.json')) {
-                        try {
-                            def depResult = readJSON file: "${env.REPORT_DIR}/dependency-check-report.json"
-                            recordToolResult('dependency_check', 'owasp-dep-check', depResult)
-                        } catch (Exception e) {
-                            echo "Could not parse Dependency-Check JSON: ${e.message}"
-                        }
-                    }
                 }
             }
         }
@@ -400,15 +391,6 @@ pipeline {
                           -o ${env.REPORT_DIR}/trivy-image.json ${IMAGE_TAG} || true
                     """
                     recordStage('trivy_image_scan', 'PASS', 'Trivy image scan completed')
-                    // Record detailed result
-                    if (fileExists('${env.REPORT_DIR}/trivy-image.json')) {
-                        try {
-                            def trivyImageResult = readJSON file: "${env.REPORT_DIR}/trivy-image.json"
-                            recordToolResult('trivy_image_scan', 'trivy', trivyImageResult)
-                        } catch (Exception e) {
-                            echo "Could not parse Trivy Image JSON: ${e.message}"
-                        }
-                    }
                 }
             }
         }
@@ -459,15 +441,6 @@ pipeline {
                         '''
                     }
                     recordStage('zap_scan', 'PASS', 'ZAP scan completed')
-                    // Record detailed result
-                    if (fileExists('reports/zap.json')) {
-                        try {
-                            def zapResult = readJSON file: 'reports/zap.json'
-                            recordToolResult('zap_scan', 'zap', zapResult)
-                        } catch (Exception e) {
-                            echo "Could not parse ZAP JSON: ${e.message}"
-                        }
-                    }
                 }
             }
         }
