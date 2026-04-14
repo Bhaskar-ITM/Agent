@@ -315,56 +315,46 @@ pipeline {
             when { expression { shouldRun('docker_build') } }
             steps {
                 script {
-                    // Auto-detect Dockerfile with priority order
-                    def dockerfile = ''
-                    def context = '.'
+                    // Find all Dockerfiles in the repository
+                    def dockerfiles = []
+                    def output = sh(
+                        script: "find . -name 'Dockerfile*' -type f ! -name '*.md' | sort",
+                        returnStdout: true
+                    ).trim()
                     
-                    // Check common locations in priority order
-                    def locations = [
-                        [file: 'Dockerfile', context: '.'],
-                        [file: 'docker/Dockerfile', context: '.'],
-                        [file: 'docker/backend.Dockerfile', context: 'docker'],
-                        [file: 'docker/frontend.Dockerfile', context: 'docker'],
-                        [file: 'backend/Dockerfile', context: 'backend'],
-                        [file: 'frontend/Dockerfile', context: 'frontend'],
-                        [file: 'api/Dockerfile', context: 'api'],
-                        [file: 'app/Dockerfile', context: 'app'],
-                        [file: 'server/Dockerfile', context: 'server'],
-                        [file: 'web/Dockerfile', context: 'web'],
-                    ]
-                    
-                    for (loc in locations) {
-                        if (fileExists(loc.file)) {
-                            dockerfile = loc.file
-                            context = loc.context
-                            echo "✓ Using ${dockerfile} (context: ${context})"
-                            break
-                        }
+                    if (output) {
+                        dockerfiles = output.split('\n').findAll { it.trim() }
                     }
                     
-                    // Fallback to find command if not in common locations
-                    if (!dockerfile) {
-                        def output = sh(
-                            script: "find . -name 'Dockerfile*' -type f | head -1",
-                            returnStdout: true
-                        ).trim()
-                        if (output) {
-                            dockerfile = output
-                            echo "✓ Found via find: ${dockerfile}"
-                        }
+                    if (dockerfiles.isEmpty()) {
+                        echo "⚠️  No Dockerfiles found - skipping Docker build"
+                        recordStage('docker_build', 'SKIPPED', 'No Dockerfiles found')
+                        return
                     }
                     
-                    // Build or skip
-                    if (dockerfile) {
-                        IMAGE_TAG = "${PROJECT.project_id ?: 'scan'}:${params.SCAN_ID}"
-                        // Use root context since Dockerfiles reference paths like backend/
-                        def buildContext = dockerfile.contains('/') ? '.' : '.'
-                        sh "docker build -t ${IMAGE_TAG} -f ${dockerfile} ."
-                        recordStage('docker_build', 'PASS', 'Built from ${dockerfile}')
-                    } else {
-                        echo "⚠️  No Dockerfile found - skipping Docker build"
-                        recordStage('docker_build', 'SKIPPED', 'No Dockerfile found')
+                    echo "Found ${dockerfiles.size()} Dockerfiles: ${dockerfiles.join(', ')}"
+                    
+                    // Build each Dockerfile found and store image tags
+                    def buildResults = []
+                    def allImageTags = []
+                    
+                    dockerfiles.each { dockerfile ->
+                        def imageName = dockerfile.replaceAll('[^a-zA-Z0-9]', '-').take(100)
+                        def imageTag = "${PROJECT.project_id ?: 'scan'}:${imageName}-${params.SCAN_ID}"
+                        def buildContext = dockerfile.contains('/') ? dockerfile.substring(0, dockerfile.lastIndexOf('/')) : '.'
+                        
+                        echo "Building ${dockerfile} with context: ${buildContext}"
+                        sh "docker build -t ${imageTag} -f ${dockerfile} ${buildContext} || echo 'Build failed for ${dockerfile}'"
+                        
+                        allImageTags << imageTag
+                        buildResults << dockerfile
                     }
+                    
+                    // Store all image tags for later stages
+                    env.ALL_IMAGE_TAGS = allImageTags.join(',')
+                    env.DOCKERFILE_COUNT = dockerfiles.size().toString()
+                    
+                    recordStage('docker_build', 'PASS', 'Built ${buildResults.size()} images: ' + buildResults.join(', '))
                 }
             }
         }
@@ -376,19 +366,31 @@ pipeline {
                                                   usernameVariable: 'DOCKER_USER',
                                                   passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        // Construct proper Docker image name
-                        def imageName = "${DOCKER_USER}/scan-${PROJECT.project_id ?: params.SCAN_ID}".toString()
-                        def imageTag = "${imageName}:${params.SCAN_ID}".toString()
+                        def allImageTags = env.ALL_IMAGE_TAGS ? env.ALL_IMAGE_TAGS.split(',') : []
                         
-                        // Tag the image with proper name
-                        sh "docker tag ${IMAGE_TAG} ${imageTag}"
+                        if (allImageTags.isEmpty()) {
+                            echo "⚠️  No images to push - skipping Docker push"
+                            recordStage('docker_push', 'SKIPPED', 'No images to push')
+                            return
+                        }
                         
-                        // Login and push
-                        sh '''
-                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin || exit 1
-                            docker push ''' + imageTag + ''' || { echo "Docker push failed"; exit 1; }
-                        '''
-                        recordStage('docker_push', 'PASS', 'Pushed to ' + imageTag)
+                        def pushedImages = []
+                        
+                        // Push each image
+                        allImageTags.each { imageTag ->
+                            def imageName = imageTag.replaceAll('[^a-zA-Z0-9/]', '-')
+                            def pushTag = "${DOCKER_USER}/${imageName}".toString()
+                            
+                            echo "Pushing ${imageTag} as ${pushTag}"
+                            sh "docker tag ${imageTag} ${pushTag}"
+                            sh '''
+                                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin || exit 1
+                                docker push ''' + pushTag + ''' || { echo "Push failed for ''' + pushTag + '''"; }
+                            '''
+                            pushedImages << pushTag
+                        }
+                        
+                        recordStage('docker_push', 'PASS', 'Pushed ${pushedImages.size()} images: ' + pushedImages.join(', '))
                     }
                 }
             }
@@ -398,11 +400,27 @@ pipeline {
             when { expression { shouldRun('trivy_image_scan') } }
             steps {
                 script {
-                    sh """
-                        /home/kali_linux/.local/bin/trivy image --format json \
-                          -o ${env.REPORT_DIR}/trivy-image.json ${IMAGE_TAG} || true
-                    """
-                    recordStage('trivy_image_scan', 'PASS', 'Trivy image scan completed')
+                    def allImageTags = env.ALL_IMAGE_TAGS ? env.ALL_IMAGE_TAGS.split(',') : []
+                    
+                    if (allImageTags.isEmpty()) {
+                        echo "⚠️  No images to scan - skipping Trivy image scan"
+                        recordStage('trivy_image_scan', 'SKIPPED', 'No images to scan')
+                        return
+                    }
+                    
+                    def scannedImages = []
+                    
+                    // Scan each image
+                    allImageTags.each { imageTag ->
+                        echo "Scanning image: ${imageTag}"
+                        sh """
+                            /home/kali_linux/.local/bin/trivy image --format json \
+                              -o ${env.REPORT_DIR}/trivy-image-$(echo ${imageTag} | md5sum | cut -d' ' -f1).json ${imageTag} || true
+                        """
+                        scannedImages << imageTag
+                    }
+                    
+                    recordStage('trivy_image_scan', 'PASS', 'Scanned ${scannedImages.size()} images: ' + scannedImages.join(', '))
                 }
             }
         }
