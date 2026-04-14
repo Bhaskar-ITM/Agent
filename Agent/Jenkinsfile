@@ -543,4 +543,34 @@ def recordStage(stageName, status, summary) {
         timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
     ])
     echo "Recorded stage: ${stageName} - ${status}"
+    
+    // Send intermediate callback to update frontend
+    sendIntermediateCallback(stageName)
+}
+
+def sendIntermediateCallback(finishedStage) {
+    def currentStages = STAGES_RESULTS ?: []
+    
+    def payload = [
+        status: 'RUNNING',
+        build_number: currentBuild.number,
+        scan_id: params.SCAN_ID,
+        scan_mode: params.SCAN_MODE,
+        stages: currentStages,
+        finished_at: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')),
+        ERROR_MESSAGE: null,
+        ERROR_TYPE: null,
+        JENKINS_CONSOLE_URL: null
+    ]
+    
+    writeFile file: 'callback.json', text: groovy.json.JsonOutput.toJson(payload)
+    
+    sh """
+        curl -sS -X POST \
+          -H "Content-Type: application/json" \
+          -H "X-Callback-Token: ${CALLBACK_TOKEN}" \
+          --data @callback.json \
+          "${CALLBACK_URL}" \
+        || echo "Intermediate callback failed"
+    """
 }
