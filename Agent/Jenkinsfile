@@ -348,16 +348,16 @@ pipeline {
                         ).trim()
                         if (output) {
                             dockerfile = output
-                            context = output.contains('/') ? 
-                                output.substring(0, output.lastIndexOf('/')) : '.'
-                            echo "✓ Found via find: ${dockerfile} (context: ${context})"
+                            echo "✓ Found via find: ${dockerfile}"
                         }
                     }
                     
                     // Build or skip
                     if (dockerfile) {
                         IMAGE_TAG = "${PROJECT.project_id ?: 'scan'}:${params.SCAN_ID}"
-                        sh "docker build -t ${IMAGE_TAG} -f ${dockerfile} ${context}"
+                        // Use root context since Dockerfiles reference paths like backend/
+                        def buildContext = dockerfile.contains('/') ? '.' : '.'
+                        sh "docker build -t ${IMAGE_TAG} -f ${dockerfile} ."
                         recordStage('docker_build', 'PASS', 'Built from ${dockerfile}')
                     } else {
                         echo "⚠️  No Dockerfile found - skipping Docker build"
