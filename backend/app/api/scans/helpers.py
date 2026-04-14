@@ -162,7 +162,7 @@ def parse_jenkins_payload(payload: dict) -> dict:
         }
 
     stage_results = []
-    raw_results = payload.get("STAGE_RESULTS", [])
+    raw_results = payload.get("stages") or payload.get("STAGE_RESULTS", [])
     if raw_results:
         try:
             if isinstance(raw_results, str):

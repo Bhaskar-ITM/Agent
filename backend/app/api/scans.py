@@ -506,7 +506,7 @@ def scan_callback(
         db.commit()
         return {"status": "success", "idempotent": True}
 
-    stages = report.get("stages", [])
+    stages = report.get("stages") or report.get("STAGE_RESULTS", [])
     if not isinstance(stages, list):
         raise HTTPException(status_code=400, detail="stages must be a list")
 
