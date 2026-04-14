@@ -478,16 +478,13 @@ pipeline {
             script {
                 archiveArtifacts artifacts: "${env.REPORT_DIR}/**", allowEmptyArchive: true
 
-                // Build detailed error information for failed scans
                 def errorMessage = null
                 def errorType = null
                 def jenkinsConsoleUrl = null
 
                 if (currentBuild.currentResult == 'FAILURE' || currentBuild.currentResult == 'ABORTED') {
-                    // Get the cause of failure - use wrappedBuild for sandbox compatibility
                     def failedStage = null
                     try {
-                        // Try to get build execution details (may be restricted by script security)
                         def buildWrapper = currentBuild.rawBuild
                         if (buildWrapper && buildWrapper.hasProperty('execution')) {
                             def executions = buildWrapper.execution
@@ -500,36 +497,21 @@ pipeline {
                                 }
                             }
                         }
-                    } catch (SecurityException e) {
-                        // Script security doesn't allow rawBuild, use fallback
-                        echo "Using fallback error handling (script security restricted)"
-                        errorMessage = "Pipeline failed at stage: ${currentBuild.currentResult}"
-                        errorType = 'PIPELINE_ERROR'
                     } catch (Exception e) {
-                        echo "Error getting build details: ${e.message}"
+                        echo "Could not get detailed error: ${e.message}"
                     }
                     
-                    // Set default error if not already set
-                    if (!errorMessage) {
-                        errorMessage = "Pipeline execution failed"
-                    }
-                    if (!errorType) {
-                        errorType = 'PIPELINE_ERROR'
-                    }
-                    
-                    // Determine error type based on failure
                     if (currentBuild.buildCauses?.any { it.shortDescription?.contains('Timeout') }) {
                         errorType = 'TIMEOUT'
-                        errorMessage = "Scan timed out after ${params.SCAN_TIMEOUT ? params.SCAN_TIMEOUT / 60 : 60} minutes. The pipeline exceeded the maximum allowed execution time."
+                        errorMessage = "Scan timed out after ${params.SCAN_TIMEOUT ? params.SCAN_TIMEOUT.toInteger() / 60 : 120} minutes"
                     } else if (failedStage) {
                         errorType = 'PIPELINE_ERROR'
-                        errorMessage = "Pipeline failed at stage: ${failedStage.name}. Check Jenkins console for detailed error logs."
+                        errorMessage = "Pipeline failed at stage: ${failedStage.name}. Check Jenkins console for details."
                     } else {
                         errorType = 'PIPELINE_ERROR'
-                        errorMessage = "Pipeline failed with status: ${currentBuild.currentResult}. Review build logs for details."
+                        errorMessage = "Pipeline failed. Check Jenkins console logs for details."
                     }
-
-                    // Build Jenkins console URL using local Jenkins server
+                    
                     jenkinsConsoleUrl = "${env.JENKINS_BASE_URL ?: 'http://192.168.1.101:8080'}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/console"
                 }
 
@@ -540,15 +522,13 @@ pipeline {
                     scan_mode: params.SCAN_MODE,
                     stages: STAGES_RESULTS ?: [],
                     finished_at: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')),
-                    error_message: errorMessage,
-                    error_type: errorType,
-                    jenkins_console_url: jenkinsConsoleUrl
+                    ERROR_MESSAGE: errorMessage ?: "Pipeline completed with status: ${currentBuild.currentResult}",
+                    ERROR_TYPE: errorType ?: 'SUCCESS',
+                    JENKINS_CONSOLE_URL: jenkinsConsoleUrl
                 ]
 
-                // Write callback payload to file
                 writeFile file: 'callback.json', text: groovy.json.JsonOutput.toJson(payload)
 
-                // Send callback to backend
                 sh """
                     curl -sS -X POST \
                       -H "Content-Type: application/json" \
@@ -566,7 +546,6 @@ pipeline {
 
         failure {
             echo "Pipeline failed for SCAN_ID: ${params.SCAN_ID}"
-            echo "Failure reason will be sent to backend in callback"
         }
     }
 }
