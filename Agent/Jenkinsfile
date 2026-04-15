@@ -422,12 +422,10 @@ pipeline {
                     
                     // Scan each image
                     allImageTags.each { imageTag ->
-                        echo "Scanning image: ${imageTag}"
-                        sh """
-                            /home/kali_linux/.local/bin/trivy image --format json \
-                              -o reports/trivy-image-$(echo ${imageTag} | md5sum | cut -d' ' -f1).json ${imageTag} || true
-                        """
-                        scannedImages << imageTag
+                        def safeTag = imageTag.toString()
+                        echo "Scanning image: ${safeTag}"
+                        sh "/home/kali_linux/.local/bin/trivy image --format json -o reports/trivy-image-\$(echo ${safeTag} | md5sum | cut -d' ' -f1).json ${safeTag} || true"
+                        scannedImages << safeTag
                     }
                     
                     recordStage('trivy_image_scan', 'PASS', 'Scanned ${scannedImages.size()} images: ' + scannedImages.join(', '))
