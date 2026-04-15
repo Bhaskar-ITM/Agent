@@ -215,51 +215,7 @@ pipeline {
             }
         }
 
-        stage('4. NPM / PIP Install') {
-            when { expression { shouldRun('npm_pip_install') } }
-            steps {
-                // Per-stage timeout: 10 minutes for dependency installation
-                timeout(time: 10, unit: 'MINUTES') {
-                    script {
-                        // Find package.json location
-                        def npmDir = sh(
-                            script: "find . -name 'package.json' -type f 2>/dev/null | grep -v node_modules | head -1",
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "Found package.json at: ${npmDir}"
-                        
-                        if (npmDir && npmDir != "") {
-                            dir(npmDir.replaceAll('/package.json', '')) {
-                                sh 'npm ci'
-                                sh 'npm audit --json > reports/npm-audit.json || true'
-                            }
-                        } else {
-                            echo "No package.json found, skipping npm install"
-                        }
-                        
-                        // Find requirements.txt location  
-                        def pipDir = sh(
-                            script: "find . -name 'requirements.txt' -type f 2>/dev/null | grep -v node_modules | head -1",
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "Found requirements.txt at: ${pipDir}"
-                        
-                        if (pipDir && pipDir != "") {
-                            dir(pipDir.replaceAll('/requirements.txt', '')) {
-                                sh 'pip install --break-system-packages -r requirements.txt'
-                            }
-                        } else {
-                            echo "No requirements.txt found, skipping pip install"
-                        }
-                    }
-                }
-                recordStage('npm_pip_install', 'PASS', 'Dependencies installed')
-            }
-        }
-
-        stage('5. Dependency Check') {
+        stage('4. Dependency Check') {
             when { expression { shouldRun('dependency_check') } }
             steps {
                 script {
@@ -309,7 +265,7 @@ pipeline {
             }
         }
 
-        stage('6. Trivy FS Scan') {
+        stage('5. Trivy FS Scan') {
             when { expression { shouldRun('trivy_fs_scan') } }
             steps {
                 sh """
@@ -321,7 +277,7 @@ pipeline {
             }
         }
 
-        stage('7. Docker Build') {
+        stage('6. Docker Build') {
             when { expression { shouldRun('docker_build') } }
             steps {
                 script {
@@ -369,7 +325,7 @@ pipeline {
             }
         }
 
-        stage('8. Docker Push') {
+        stage('7. Docker Push') {
             when { expression { shouldRun('docker_push') } }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-credentials',
@@ -406,7 +362,7 @@ pipeline {
             }
         }
 
-        stage('9. Trivy Image Scan') {
+        stage('8. Trivy Image Scan') {
             when { expression { shouldRun('trivy_image_scan') } }
             steps {
                 script {
@@ -433,7 +389,7 @@ pipeline {
             }
         }
 
-        stage('10. Nmap Scan') {
+        stage('9. Nmap Scan') {
             when { expression { shouldRun('nmap_scan') } }
             steps {
                 script {
@@ -452,7 +408,7 @@ pipeline {
             }
         }
 
-        stage('11. ZAP Scan') {
+        stage('10. ZAP Scan') {
             when { expression { shouldRun('zap_scan') } }
             steps {
                 script {
