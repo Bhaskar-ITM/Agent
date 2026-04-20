@@ -40,3 +40,7 @@
 ## 2026-04-13 - Surgical Cache Updates and Adaptive Polling
 **Learning:** High-frequency polling and real-time WebSocket updates can conflict, leading to redundant network requests and state thrashing. Full query invalidations on WebSocket messages trigger immediate HTTP refetches, which is often unnecessary if the message contains the updated data.
 **Action:** Implement surgical cache updates using `queryClient.setQueryData` to apply WebSocket updates directly to the TanStack Query cache. Combine this with adaptive polling that increases the `refetchInterval` (back-off) when the WebSocket is connected (`wsConnected`), significantly reducing network noise while maintaining data freshness.
+
+## 2026-04-20 - Optimized Scan Recovery N+1 Queries
+**Learning:** The scan recovery service previously performed a project lookup inside loops for active and stuck scans, leading to an N+1 query bottleneck. While often overlooked in background tasks, these bottlenecks can cause significant database load and slow down reconciliation cycles as the system scales.
+**Action:** Always use batch fetching (`.in_(ids)`) and dictionary-based lookups when iterating over entities that have related data in another table, even in background services like `scan_recovery.py`.
