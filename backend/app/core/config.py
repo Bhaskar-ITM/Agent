@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     API_KEY: str
     REDIS_URL: str = "redis://redis:6379/0"
     CORS_ORIGINS: List[str] = ["http://localhost:5173"]
+    SONARQUBE_URL: str = "localhost:9000"
 
     model_config = SettingsConfigDict(
         extra="ignore",

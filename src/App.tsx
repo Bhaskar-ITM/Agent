@@ -17,6 +17,8 @@ const ScanStatusPage = lazy(() => import('./pages/ScanStatusPage'));
 const ScanHistoryPage = lazy(() => import('./pages/ScanHistoryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
+const DocsPage = lazy(() => import('./pages/DocsPage'));
+const ProjectReportsPage = lazy(() => import('./pages/ProjectReportsPage'));
 
 // Loading component for lazy-loaded routes
 const PageLoader = () => (
@@ -98,6 +100,14 @@ function App() {
                 }
               />
               <Route
+                path="/projects/:projectId/reports"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ProjectReportsPage />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="/settings"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -110,6 +120,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <UserManagementPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="/docs"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DocsPage />
                   </Suspense>
                 }
               />

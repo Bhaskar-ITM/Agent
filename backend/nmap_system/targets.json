@@ -1,0 +1,32 @@
+{
+  "client": "Local Test Environment",
+  "month": "March 2026",
+  "ai_agent": false,
+  "ai_model": "ollama/mistral",
+  "targets": [
+    {
+      "ip": "192.168.1.215",
+      "name": "Test-Host-215",
+      "environment": "Test",
+      "allow_aggressive": true
+    },
+    {
+      "ip": "192.168.1.101",
+      "name": "Test-Host-101",
+      "environment": "Test",
+      "allow_aggressive": true
+    },
+    {
+      "ip": "192.168.1.79",
+      "name": "Test-Host-79",
+      "environment": "Test",
+      "allow_aggressive": true
+    },
+    {
+      "ip": "192.168.1.61",
+      "name": "Test-Host-61",
+      "environment": "Test",
+      "allow_aggressive": true
+    }
+  ]
+}

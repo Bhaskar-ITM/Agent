@@ -162,6 +162,18 @@ def scan_callback(
         logger.info(f"Scan {scan_id} transitioned to RUNNING state")
     elif jenkins_status == "SUCCESS":
         scan_obj.state = ScanState.COMPLETED
+
+        # Trigger async report processing
+        build_num = str(build_number) if build_number else None
+        if build_num:
+            from app.tasks.report_tasks import process_scan_reports_task
+            from app.core.config import settings
+            background_tasks.add_task(
+                process_scan_reports_task.delay,
+                scan_id=scan_id,
+                jenkins_build_number=build_num,
+                jenkins_base_url=settings.JENKINS_BASE_URL,
+            )
     elif jenkins_status in {"FAILURE", "ABORTED", "UNSTABLE"}:
         scan_obj.state = ScanState.FAILED
 

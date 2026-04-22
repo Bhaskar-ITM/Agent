@@ -122,5 +122,23 @@ export const api = {
       const response = await apiClient.get(`/projects/${projectId}/scans`);
       return response.data;
     }
+  },
+  reports: {
+    getSummary: async (projectId: string) => {
+      const response = await apiClient.get(`/reports/projects/${projectId}/reports/summary`);
+      return response.data;
+    },
+    getAll: async (projectId: string) => {
+      const response = await apiClient.get(`/reports/projects/${projectId}/reports`);
+      return response.data;
+    },
+    getOne: async (reportId: number) => {
+      const response = await apiClient.get(`/reports/${reportId}`);
+      return response.data;
+    },
+    download: async (reportId: number) => {
+      const response = await apiClient.get(`/reports/${reportId}/download`);
+      return response.data;
+    }
   }
 };

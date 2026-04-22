@@ -389,7 +389,7 @@ pipeline {
             }
         }
 
-        stage('9. Nmap Scan') {
+        stage('9. Nmap System Scan') {
             when { expression { shouldRun('nmap_scan') } }
             steps {
                 script {
@@ -400,10 +400,31 @@ pipeline {
                         echo "SKIP: No target_ip provided"
                         return
                     }
+
+                    // Ensure report directory exists
+                    sh "mkdir -p reports"
+
+                    // Run Nmap_system scanner and parser
                     sh """
-                        nmap -sV -sC -oX reports/nmap.xml ${PROJECT.target_ip} || true
+                        cd Nmap_system/pentest_system
+
+                        # Create targets.json for single target scan
+                        echo '{"targets":[{"ip":"${PROJECT.target_ip}","name":"scan-target","environment":"scanned"}]}' > targets.json
+
+                        # Run scanner (11 scan types per target)
+                        python3 scanner.py
+
+                        # Run parser (17 detection rules)
+                        python3 parser.py
                     """
-                    recordStage('nmap_scan', 'PASS', 'Nmap scan completed')
+
+                    // Copy findings to reports directory
+                    sh """
+                        cp Nmap_system/pentest_system/scans/*/findings.json reports/nmap_findings.json 2>/dev/null || true
+                        echo "Nmap system scan completed"
+                    """
+
+                    recordStage('nmap_scan', 'PASS', 'Nmap system scan completed (11 scans + parser)')
                 }
             }
         }
