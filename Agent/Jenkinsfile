@@ -165,7 +165,7 @@ pipeline {
             }
         }
 
-        stage('1. Git Checkout') {
+        stage('Git Checkout') {
             steps {
                 script {
                     checkout([
@@ -181,7 +181,7 @@ pipeline {
             }
         }
 
-        stage('2. Sonar Scanner') {
+        stage('Sonar Scanner') {
             when { expression { shouldRun('sonar_scanner') } }
             steps {
                 // Per-stage timeout: 15 minutes for Sonar analysis
@@ -207,7 +207,7 @@ pipeline {
             }
         }
 
-        stage('3. Sonar Quality Gate') {
+        stage('Sonar Quality Gate') {
             when { expression { shouldRun('sonar_quality_gate') } }
             steps {
                 echo "⏭️  Skipping SonarQube Quality Gate check"
@@ -215,7 +215,7 @@ pipeline {
             }
         }
 
-        stage('4. Dependency Check') {
+        stage('Dependency Check') {
             when { expression { shouldRun('dependency_check') } }
             steps {
                 script {
@@ -265,7 +265,7 @@ pipeline {
             }
         }
 
-        stage('5. Trivy FS Scan') {
+        stage('Trivy FS Scan') {
             when { expression { shouldRun('trivy_fs_scan') } }
             steps {
                 sh """
@@ -277,7 +277,7 @@ pipeline {
             }
         }
 
-        stage('6. Docker Build') {
+        stage('Docker Build') {
             when { expression { shouldRun('docker_build') } }
             steps {
                 script {
@@ -325,7 +325,7 @@ pipeline {
             }
         }
 
-        stage('7. Docker Push') {
+        stage('Docker Push') {
             when { expression { shouldRun('docker_push') } }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-credentials',
@@ -362,7 +362,7 @@ pipeline {
             }
         }
 
-        stage('8. Trivy Image Scan') {
+        stage('Trivy Image Scan') {
             when { expression { shouldRun('trivy_image_scan') } }
             steps {
                 script {
@@ -389,7 +389,7 @@ pipeline {
             }
         }
 
-        stage('9. Nmap System Scan') {
+        stage('Nmap System Scan') {
             when { expression { shouldRun('nmap_scan') } }
             steps {
                 script {
@@ -429,7 +429,7 @@ pipeline {
             }
         }
 
-        stage('10. ZAP Scan') {
+        stage('ZAP Scan') {
             when { expression { shouldRun('zap_scan') } }
             steps {
                 script {
