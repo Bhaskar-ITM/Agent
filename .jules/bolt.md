@@ -40,3 +40,7 @@
 ## 2026-04-13 - Surgical Cache Updates and Adaptive Polling
 **Learning:** High-frequency polling and real-time WebSocket updates can conflict, leading to redundant network requests and state thrashing. Full query invalidations on WebSocket messages trigger immediate HTTP refetches, which is often unnecessary if the message contains the updated data.
 **Action:** Implement surgical cache updates using `queryClient.setQueryData` to apply WebSocket updates directly to the TanStack Query cache. Combine this with adaptive polling that increases the `refetchInterval` (back-off) when the WebSocket is connected (`wsConnected`), significantly reducing network noise while maintaining data freshness.
+
+## 2026-05-15 - Eliminating N+1 Query Bottlenecks in Scan Recovery
+**Learning:** Functions that process lists of entities (like scans) and fetch related data (like projects) inside the loop suffer from N+1 query bottlenecks. This significantly degrades performance as the dataset grows.
+**Action:** Use batch-fetching with SQLAlchemy's `.in_` operator to retrieve all related entities in a single query before the loop. Store the results in a dictionary for O(1) lookups within the processing loop to maintain performance regardless of list size.
