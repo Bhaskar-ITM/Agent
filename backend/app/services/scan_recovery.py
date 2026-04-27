@@ -65,10 +65,14 @@ def poll_jenkins_for_active_scans() -> int:
         ).all()
         now = datetime.now(timezone.utc)
 
+        # Performance Optimization (Bolt ⚡): Eliminate N+1 query bottleneck by batch-fetching
+        # all required projects into an O(1) lookup dictionary.
+        project_ids = {s.project_id for s in active_scans}
+        projects = db.query(ProjectDB).filter(ProjectDB.project_id.in_(project_ids)).all()
+        project_map = {p.project_id: p for p in projects}
+
         for scan_obj in active_scans:
-            project_obj = db.query(ProjectDB).filter(
-                ProjectDB.project_id == scan_obj.project_id
-            ).first()
+            project_obj = project_map.get(scan_obj.project_id)
 
             if scan_obj.jenkins_build_number:
                 try:
@@ -181,6 +185,12 @@ def recover_stuck_scans() -> int:
             ScanDB.state.in_([ScanState.QUEUED, ScanState.RUNNING]),
             ScanDB.created_at < timeout_threshold
         ).all()
+
+        # Performance Optimization (Bolt ⚡): Eliminate N+1 query bottleneck by batch-fetching
+        # all required projects into an O(1) lookup dictionary.
+        project_ids = {s.project_id for s in stuck_scans}
+        projects = db.query(ProjectDB).filter(ProjectDB.project_id.in_(project_ids)).all()
+        project_map = {p.project_id: p for p in projects}
         
         recovered_count = 0
         for scan_obj in stuck_scans:
@@ -196,9 +206,7 @@ def recover_stuck_scans() -> int:
             scan_obj.error_type = "TIMEOUT"
             
             # Update project state
-            project_obj = db.query(ProjectDB).filter(
-                ProjectDB.project_id == scan_obj.project_id
-            ).first()
+            project_obj = project_map.get(scan_obj.project_id)
             if project_obj:
                 project_obj.last_scan_state = ScanState.FAILED.value
             
