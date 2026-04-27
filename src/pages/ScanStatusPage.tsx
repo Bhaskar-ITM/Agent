@@ -5,6 +5,7 @@ import { ArrowLeft, RefreshCw, AlertCircle, CheckCircle, Clock, ExternalLink, Sh
 import { api } from '../services/api';
 import { useScanReset, useScanCancel } from '../hooks/useScanReset';
 import { useScanWebSocket } from '../hooks/useScanWebSocket';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { ScanErrorModal } from '../components/ScanErrorModal';
 import { ScanProgressBar } from '../components/ScanProgressBar';
 import { ErrorSuggestions } from '../components/ErrorSuggestions';
@@ -567,88 +568,33 @@ const ScanStatusPage = () => {
         isRetrying={resetMutation.isPending}
       />
 
-      {showResetConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-500" onClick={() => setShowResetConfirm(false)}></div>
-          <div className="bg-white rounded-[3.5rem] max-w-xl w-full p-12 shadow-2xl relative z-10 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 flex flex-col items-center text-center">
-            <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-inner relative ring-8 ring-blue-50/50">
-              <div className="absolute inset-0 bg-blue-100 rounded-[2.5rem] animate-ping opacity-20"></div>
-              <RefreshCw className="w-12 h-12 relative z-10" />
-            </div>
-            <h3 className="text-4xl font-black text-slate-900 tracking-tighter leading-none mb-6 uppercase">Reset Scan<br/>Execution?</h3>
-            <p className="text-slate-500 font-medium leading-relaxed mb-12 italic px-4">
-              This action will clear the current execution trace and allow you to re-initialize the pipeline. Existing telemetry will be archived.
-            </p>
-            <div className="flex flex-col w-full gap-4">
-              <button
-                onClick={handleReset}
-                disabled={resetMutation.isPending}
-                className="w-full btn-primary h-20 uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-4"
-              >
-                {resetMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Resetting Cluster...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-5 h-5" />
-                    Confirm Reset & Retry
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => setShowResetConfirm(false)}
-                className="w-full btn-secondary h-16 uppercase tracking-[0.2em] text-[10px]"
-              >
-                Abort Action
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={handleReset}
+        title="Reset Scan<br/>Execution?"
+        message="This action will clear the current execution trace and allow you to re-initialize the pipeline. Existing telemetry will be archived."
+        confirmLabel={resetMutation.isPending ? "Resetting Cluster..." : "Confirm Reset & Retry"}
+        confirmIcon={RefreshCw}
+        cancelLabel="Abort Action"
+        variant="info"
+        icon={<RefreshCw className="w-12 h-12" />}
+        isPending={resetMutation.isPending}
+      />
 
-      {showCancelConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-500" onClick={() => setShowCancelConfirm(false)}></div>
-          <div className="bg-white rounded-[3.5rem] max-w-xl w-full p-12 shadow-2xl relative z-10 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 flex flex-col items-center text-center">
-            <div className="w-24 h-24 bg-red-50 text-red-600 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-inner relative ring-8 ring-red-50/50">
-              <div className="absolute inset-0 bg-red-100 rounded-[2.5rem] animate-ping opacity-20"></div>
-              <X className="w-12 h-12 relative z-10" />
-            </div>
-            <h3 className="text-4xl font-black text-slate-900 tracking-tighter leading-none mb-6 uppercase">Terminate<br/>Execution?</h3>
-            <p className="text-slate-500 font-medium leading-relaxed mb-12 italic px-4">
-              This action will immediately stop the running pipeline. All in-progress stages will be aborted and partial results may be lost.
-            </p>
-            <div className="flex flex-col w-full gap-4">
-              <button
-                onClick={handleCancel}
-                disabled={cancelMutation.isPending}
-                className="w-full h-20 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-4 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {cancelMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Cancelling...
-                  </>
-                ) : (
-                  <>
-                    <X className="w-5 h-5" />
-                    Confirm Termination
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => setShowCancelConfirm(false)}
-                disabled={cancelMutation.isPending}
-                className="w-full btn-secondary h-16 uppercase tracking-[0.2em] text-[10px] disabled:opacity-50"
-              >
-                Abort Action
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+        onConfirm={handleCancel}
+        title="Terminate<br/>Execution?"
+        message="This action will immediately stop the running pipeline. All in-progress stages will be aborted and partial results may be lost."
+        confirmLabel={cancelMutation.isPending ? "Cancelling..." : "Confirm Termination"}
+        confirmIcon={X}
+        cancelLabel="Abort Action"
+        variant="danger"
+        icon={<X className="w-12 h-12" />}
+        isPending={cancelMutation.isPending}
+      />
     </div>
   );
 };

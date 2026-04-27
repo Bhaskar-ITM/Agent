@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
-import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, X, Copy, Check, History, Zap, ExternalLink, Cpu, HardDrive, Trash2, PencilLine, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Play, Settings2, Info, GitBranch, ShieldCheck, Globe, MapPin, Copy, Check, History, Zap, ExternalLink, Cpu, HardDrive, Trash2, PencilLine, AlertCircle } from 'lucide-react';
 import { ApiError } from '../utils/apiError';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 const ProjectControlPage = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -359,89 +360,33 @@ const ProjectControlPage = () => {
         </aside>
       </div>
 
-      {/* Enhanced Authorization Modal */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-500" onClick={() => setShowConfirm(false)}></div>
-          <div className="bg-white rounded-[3.5rem] max-w-xl w-full p-12 shadow-2xl relative z-10 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 flex flex-col items-center text-center">
-            <button 
-              onClick={() => setShowConfirm(false)} 
-              className="absolute top-10 right-10 p-4 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-90"
-              aria-label="Close authorization prompt"
-            >
-              <X className="w-7 h-7" />
-            </button>
-            
-            <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-inner relative ring-8 ring-blue-50/50">
-              <div className="absolute inset-0 bg-blue-100 rounded-[2.5rem] animate-ping opacity-20"></div>
-              <Zap className="w-12 h-12 fill-current relative z-10" />
-            </div>
-            
-            <h2 className="text-4xl font-black text-slate-900 tracking-tighter leading-none mb-6 uppercase">Authorize<br/>Tactical Scan?</h2>
-            <p className="text-slate-500 font-medium leading-relaxed mb-12 italic px-4">
-              You are about to trigger a comprehensive security assessment. This will consume pipeline resources and generate fresh telemetry for this perimeter.
-            </p>
-            
-            <div className="flex flex-col w-full gap-4">
-              <button
-                onClick={handleRunAutomated}
-                className="w-full btn-primary h-20 uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-4"
-              >
-                <Play className="w-5 h-5 fill-current" />
-                Initialize Scan Cluster
-              </button>
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="w-full btn-secondary h-16 uppercase tracking-[0.2em] text-[10px]"
-              >
-                Abort Operation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={handleRunAutomated}
+        title="Authorize<br/>Tactical Scan?"
+        message="You are about to trigger a comprehensive security assessment. This will consume pipeline resources and generate fresh telemetry for this perimeter."
+        confirmLabel="Initialize Scan Cluster"
+        confirmIcon={Play}
+        cancelLabel="Abort Operation"
+        variant="info"
+        icon={<Zap className="w-12 h-12 fill-current" />}
+        isPending={isTriggering}
+      />
 
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-500" onClick={() => setShowDeleteConfirm(false)}></div>
-          <div className="bg-white rounded-[3.5rem] max-w-xl w-full p-12 shadow-2xl relative z-10 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 flex flex-col items-center text-center">
-            <button 
-              onClick={() => setShowDeleteConfirm(false)} 
-              className="absolute top-10 right-10 p-4 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-90"
-              aria-label="Close delete prompt"
-            >
-              <X className="w-7 h-7" />
-            </button>
-            
-            <div className="w-24 h-24 bg-red-50 text-red-600 rounded-[2.5rem] flex items-center justify-center mb-10 shadow-inner relative ring-8 ring-red-50/50">
-              <div className="absolute inset-0 bg-red-100 rounded-[2.5rem] animate-ping opacity-20"></div>
-              <Trash2 className="w-12 h-12 relative z-10" />
-            </div>
-            
-            <h2 className="text-4xl font-black text-slate-900 tracking-tighter leading-none mb-6 uppercase">Delete<br/>Project?</h2>
-            <p className="text-slate-500 font-medium leading-relaxed mb-12 italic px-4">
-              This will permanently remove the project, its scans, and stored artifacts. This action cannot be undone.
-            </p>
-            
-            <div className="flex flex-col w-full gap-4">
-              <button
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                className="w-full bg-red-600 hover:bg-red-700 text-white h-20 rounded-[2rem] uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-4 disabled:opacity-50"
-              >
-                <Trash2 className="w-5 h-5" />
-                Confirm Delete
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="w-full btn-secondary h-16 uppercase tracking-[0.2em] text-[10px]"
-              >
-                Abort Operation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Delete<br/>Project?"
+        message="This will permanently remove the project, its scans, and stored artifacts. This action cannot be undone."
+        confirmLabel="Confirm Delete"
+        confirmIcon={Trash2}
+        cancelLabel="Abort Operation"
+        variant="danger"
+        icon={<Trash2 className="w-12 h-12" />}
+        isPending={deleteMutation.isPending}
+      />
     </div>
   );
 };

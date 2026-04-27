@@ -7,3 +7,7 @@
 ## 2025-05-22 - Feedback for Destructive Actions
 **Learning:** Destructive asynchronous actions, like deleting a project, must provide immediate and clear feedback. Relying solely on the UI element disappearing is insufficient as it doesn't confirm success or explain failure. Toast notifications provide a non-intrusive way to confirm these outcomes. Additionally, links in dense lists (like a dashboard) should have project-specific `aria-label` and `title` attributes to ensure they are disambiguated for screen readers and provide context on hover.
 **Action:** Implement success and error toast notifications for all destructive operations and ensure list-item links have unique, descriptive labels.
+
+## 2025-05-23 - Standardized Accessible Modals
+**Learning:** Consolidating multiple hardcoded modal implementations into a single, highly-accessible component (like `ConfirmModal`) reduces UI inconsistencies and ensures that accessibility best practices—such as focus traps, Escape key dismissal, and ARIA labeling—are applied universally. When refactoring toward a shared component, it is crucial to ensure feature parity (e.g., support for icons and loading spinners) to avoid micro-UX regressions.
+**Action:** Use the centralized `ConfirmModal` for all destructive or significant operational decisions, and maintain the component to support the visual richness (icons/spinners) expected by the design system.
