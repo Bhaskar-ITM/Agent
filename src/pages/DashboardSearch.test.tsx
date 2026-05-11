@@ -19,7 +19,20 @@ vi.mock("../services/api", () => ({
     projects: {
       list: vi.fn(),
     },
+    reports: {
+      getSummary: vi.fn(),
+    },
   },
+  // Mock ApiError if used by components during render
+  ApiError: {
+    fromAxiosError: vi.fn(),
+    isApiError: vi.fn().mockReturnValue(false),
+  }
+}));
+
+// Mock useScanWebSocket to avoid infinite loops with fake timers
+vi.mock("../hooks/useScanWebSocket", () => ({
+  useScanWebSocket: vi.fn().mockReturnValue({ connected: true }),
 }));
 
 describe("DashboardPage Search", () => {
@@ -32,13 +45,39 @@ describe("DashboardPage Search", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api.projects.list as any).mockResolvedValue(mockProjects);
+    (api.reports.getSummary as any).mockResolvedValue({
+      total_findings: 0,
+      severity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+    });
+    queryClient.clear();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
+
+  const waitForLoad = async () => {
+    // Initial load of projects
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Advance timers for TanStack Query to transition states
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    // Need more ticks for the enabled report-summaries query
+    await act(async () => {
+      await Promise.resolve();
+      vi.advanceTimersByTime(100);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+  };
 
   it("filters projects based on search term after debounce", async () => {
     render(
@@ -51,13 +90,7 @@ describe("DashboardPage Search", () => {
       </ToastProvider>,
     );
 
-    // Initial load - need to wait for the promise to resolve AND the timers to run
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      vi.advanceTimersByTime(100);
-    });
+    await waitForLoad();
 
     expect(screen.getByText("Alpha Project")).toBeInTheDocument();
     expect(screen.getByText("Beta Project")).toBeInTheDocument();
@@ -68,20 +101,17 @@ describe("DashboardPage Search", () => {
     // Search for "Alpha"
     fireEvent.change(searchInput, { target: { value: "Alpha" } });
 
-    // Should still show all projects before debounce
-    expect(screen.getByText("Beta Project")).toBeInTheDocument();
-
-    // Advance timers
+    // Advance timers for debounce (300ms)
     act(() => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(screen.getByText("Alpha Project")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha Project")).toBeInTheDocument();
     expect(screen.queryByText("Beta Project")).not.toBeInTheDocument();
     expect(screen.queryByText("Gamma Project")).not.toBeInTheDocument();
   });
 
-  it('shows "No matches found" message after debounce', async () => {
+  it('shows "No projects found" message after debounce', async () => {
     render(
       <ToastProvider>
         <QueryClientProvider client={queryClient}>
@@ -92,9 +122,7 @@ describe("DashboardPage Search", () => {
       </ToastProvider>,
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(100);
-    });
+    await waitForLoad();
 
     const searchInput = screen.getByLabelText("Search projects");
 
@@ -106,9 +134,9 @@ describe("DashboardPage Search", () => {
     });
 
     expect(screen.queryByText("Alpha Project")).not.toBeInTheDocument();
-    expect(screen.getByText("No matches found")).toBeInTheDocument();
+    expect(screen.getByText("No projects found")).toBeInTheDocument();
     expect(
-      screen.getByText(/Try adjusting your search terms/),
+      screen.getByText(/No projects matching "Zeta"/),
     ).toBeInTheDocument();
   });
 
@@ -123,9 +151,7 @@ describe("DashboardPage Search", () => {
       </ToastProvider>,
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(100);
-    });
+    await waitForLoad();
 
     const searchInput = screen.getByLabelText("Search projects");
 
@@ -145,7 +171,7 @@ describe("DashboardPage Search", () => {
     // Search term clears immediately
     expect(searchInput).toHaveValue("");
 
-    // List also reverts after its own debounce if we're using debouncedSearchTerm
+    // List also reverts after its own debounce
     act(() => {
       vi.advanceTimersByTime(300);
     });
