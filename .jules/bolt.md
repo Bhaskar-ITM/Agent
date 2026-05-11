@@ -40,3 +40,7 @@
 ## 2026-04-13 - Surgical Cache Updates and Adaptive Polling
 **Learning:** High-frequency polling and real-time WebSocket updates can conflict, leading to redundant network requests and state thrashing. Full query invalidations on WebSocket messages trigger immediate HTTP refetches, which is often unnecessary if the message contains the updated data.
 **Action:** Implement surgical cache updates using `queryClient.setQueryData` to apply WebSocket updates directly to the TanStack Query cache. Combine this with adaptive polling that increases the `refetchInterval` (back-off) when the WebSocket is connected (`wsConnected`), significantly reducing network noise while maintaining data freshness.
+
+## 2026-05-15 - Memoizing Frequent UI Updates in Timed Components
+**Learning:** Components that use internal timers (like a 1s clock tick for elapsed time) trigger a re-render of the entire component subtree on every tick. If these components perform even moderately complex filtering or calculations (like O(N*M) stage lookups) directly in the render body, they waste significant CPU cycles on redundant work.
+**Action:** Always memoize calculations and filtering in components with frequent re-renders using `useMemo`. Combine this with algorithmic improvements (like using a Map for O(1) lookups instead of `find`) to minimize the impact of the re-renders that *do* occur.

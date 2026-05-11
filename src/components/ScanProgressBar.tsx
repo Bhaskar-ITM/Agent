@@ -1,5 +1,5 @@
 import { Clock, CheckCircle, AlertCircle, Loader2, Activity } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { type ScanStage } from '../types';
 
 interface ScanProgressBarProps {
@@ -49,6 +49,10 @@ function getStageStatusIcon(status: string) {
   return <Clock className="w-4 h-4 text-slate-300" />;
 }
 
+/**
+ * Performance Optimization (Bolt ⚡): Uses O(S+R) algorithm with Map lookup
+ * instead of O(S*R) nested find loop.
+ */
 function calculateProgress(stages: ScanStage[], relevantStages: string[]): {
   completed: number;
   running: string | null;
@@ -57,8 +61,11 @@ function calculateProgress(stages: ScanStage[], relevantStages: string[]): {
   let completed = 0;
   let running: string | null = null;
 
+  // Create a lookup map for stages to avoid nested loops (O(S))
+  const stageMap = new Map(stages.map(s => [s.stage, s]));
+
   relevantStages.forEach(stageId => {
-    const stage = stages.find(s => s.stage === stageId);
+    const stage = stageMap.get(stageId);
     if (!stage) return;
 
     const status = stage.status.toLowerCase();
@@ -72,9 +79,8 @@ function calculateProgress(stages: ScanStage[], relevantStages: string[]): {
   });
 
   // Guard against division by zero: ensure denominator is never zero
-  // Fallback to 1 prevents NaN when selectedStages is empty array
   const totalStages = relevantStages.length || 1;
-  const percentage = totalStages > 0 ? Math.round((completed / totalStages) * 100) : 0;
+  const percentage = Math.round((completed / totalStages) * 100);
 
   return { completed, running, percentage };
 }
@@ -98,12 +104,14 @@ function useElapsedTime(startedAt?: string, isRunning?: boolean) {
     };
 
     update();
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (isRunning) {
       interval = setInterval(update, 1000);
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [startedAt, isRunning]);
 
   return elapsed;
@@ -119,8 +127,8 @@ function useInitializationTime(startedAt?: string, isRunning?: boolean, hasStage
 
   useEffect(() => {
     if (!startedAt || !isRunning || hasStages) {
-      setSeconds(0);
-      return;
+      const timeout = setTimeout(() => setSeconds(0), 0);
+      return () => clearTimeout(timeout);
     }
 
     const startTime = new Date(startedAt).getTime();
@@ -152,11 +160,19 @@ export function ScanProgressBar({
 
   const elapsed = useElapsedTime(startedAt, isRunning);
 
-  const relevantStages = selectedStages && selectedStages.length > 0
-    ? STAGE_ORDER.filter(s => selectedStages.includes(s))
-    : STAGE_ORDER;
+  // Performance Optimization (Bolt ⚡): Memoize filtering to avoid O(N) work on every clock tick re-render
+  const relevantStages = useMemo(() => {
+    return selectedStages && selectedStages.length > 0
+      ? STAGE_ORDER.filter(s => selectedStages.includes(s))
+      : STAGE_ORDER;
+  }, [selectedStages]);
 
-  const { completed, running, percentage } = calculateProgress(stages, relevantStages);
+  // Performance Optimization (Bolt ⚡): Memoize progress calculation.
+  // Prevents re-calculating progress every 1s when the elapsed time counter updates.
+  const { completed, running, percentage } = useMemo(
+    () => calculateProgress(stages, relevantStages),
+    [stages, relevantStages]
+  );
 
   // Track initialization state: show warning if pipeline running but no stages after 5 minutes
   const { seconds: initSeconds, isStalled } = useInitializationTime(startedAt, isRunning, stages.length > 0);
