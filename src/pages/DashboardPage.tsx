@@ -10,10 +10,12 @@ import {
   X,
   Trash2,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { useDebounce } from "../hooks/useDebounce";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { useToast } from "../components/Toast";
+import { ConfirmModal } from "../components/ConfirmModal";
 
 const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSummaries: Record<string, ReportSummary> }) => {
   const queryClient = useQueryClient();
@@ -110,49 +112,30 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
   };
 
   return (
-    <tr className="hover:bg-slate-50/50 transition-colors group">
-      <td className="px-6 py-4">
-        <div className="flex flex-col">
-          <span className="font-medium text-slate-900">{project.name}</span>
-          <span className="text-sm text-slate-500">{project.project_id}</span>
-        </div>
-      </td>
-      <td className="px-6 py-4">
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${status.bg}`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
-          {status.label}
-        </span>
-      </td>
-      <td className="px-6 py-4 text-sm text-slate-500">{lastScanDate}</td>
-      <td className="px-6 py-4 text-right">
-        {showDeleteConfirm ? (
-          <div className="flex items-center justify-end gap-2">
-            <button
-              onClick={() => deleteProjectMutation.mutate()}
-              disabled={deleteProjectMutation.isPending}
-              className="px-3 py-1.5 bg-rose-600 text-white rounded-md text-sm font-medium hover:bg-rose-700 disabled:opacity-50"
-            >
-              {deleteProjectMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                "Delete"
-              )}
-            </button>
-            <button
-              onClick={() => setShowDeleteConfirm(false)}
-              className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-md text-sm font-medium"
-            >
-              Cancel
-            </button>
+    <>
+      <tr className="hover:bg-slate-50/50 transition-colors group">
+        <td className="px-6 py-4">
+          <div className="flex flex-col">
+            <span className="font-medium text-slate-900">{project.name}</span>
+            <span className="text-sm text-slate-500">{project.project_id}</span>
           </div>
-        ) : (
+        </td>
+        <td className="px-6 py-4">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${status.bg}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
+            {status.label}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-sm text-slate-500">{lastScanDate}</td>
+        <td className="px-6 py-4 text-right">
           <div className="flex items-center justify-end gap-2">
             {project.last_scan_id && !isScanning && (
               <Link
                 to={`/scans/${project.last_scan_id}`}
                 className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+                aria-label={`View last scan for ${project.name}`}
               >
                 View
               </Link>
@@ -160,12 +143,13 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
             <Link
               to={`/projects/${project.project_id}/reports`}
               className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+              aria-label={`View reports for ${project.name}`}
             >
               View Reports
             </Link>
             {/* Report Summary Badges */}
             {reportSummary && (
-              <div className="flex items-center gap-2 ml-3">
+              <div className="flex items-center gap-2 ml-3" title="Scan Summary">
                 <div className="relative">
                   <div
                     className="w-2 h-2 rounded-full"
@@ -186,19 +170,35 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
             <Link
               to={`/projects/${project.project_id}`}
               className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+              aria-label={`Manage ${project.name}`}
             >
               Manage
             </Link>
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="p-1.5 text-slate-400 hover:text-rose-600"
+              className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
+              aria-label={`Delete project ${project.name}`}
+              title="Delete Project"
             >
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
-        )}
-      </td>
-    </tr>
+        </td>
+      </tr>
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => deleteProjectMutation.mutate()}
+        title="DELETE <br/> PROJECT?"
+        message={`Are you sure you want to delete "${project.name}"? This action cannot be undone and all scan history will be permanently removed.`}
+        confirmLabel="Delete Project"
+        cancelLabel="Keep Project"
+        variant="danger"
+        isPending={deleteProjectMutation.isPending}
+        icon={<AlertTriangle className="w-12 h-12" />}
+      />
+    </>
   );
 };
 
@@ -331,6 +331,7 @@ const DashboardPage = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
+              aria-label="Search projects"
               placeholder="Search projects by name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -339,6 +340,7 @@ const DashboardPage = () => {
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
