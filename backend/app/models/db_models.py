@@ -58,3 +58,34 @@ class UserDB(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class ScanReportDB(Base):
+    __tablename__ = "scan_reports"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    scan_id = Column(String, index=True, nullable=False)
+    project_id = Column(String, index=True, nullable=False)
+    tool_name = Column(String, nullable=False)  # trivy_fs, zap, dependency_check, nmap, sonar
+
+    # Summary counts: {"critical": 3, "high": 12, "medium": 45, "low": 89}
+    severity_summary = Column(JSON, default=dict)
+
+    # Detailed findings: [{"id": "001", "severity": "Critical", ...}]
+    findings = Column(JSON, default=list)
+
+    # Raw report storage (full JSON from tool)
+    raw_report = Column(String, nullable=True)
+
+    # Link to Jenkins artifact or Sonar dashboard
+    report_url = Column(String, nullable=True)
+
+    # Metadata
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    # Retention: 90 days from creation
+    expires_at = Column(DateTime, nullable=True)
+
+    # Index for cleanup queries
+    __table_args__ = (
+        Index('ix_scan_reports_project_created', 'project_id', 'created_at'),
+    )

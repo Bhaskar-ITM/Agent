@@ -8,7 +8,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 
-from app.api.scans.constants import TERMINAL_STATES, STAGE_STATUS_MAP, JENKINS_STAGE_NAME_TO_ID, MAX_ARTIFACT_URL_LENGTH, MAX_ARTIFACT_SIZE_BYTES
+from app.api.scans.constants import (
+    TERMINAL_STATES,
+    STAGE_STATUS_MAP,
+    JENKINS_STAGE_NAME_TO_ID,
+    MAX_ARTIFACT_URL_LENGTH,
+    MAX_ARTIFACT_SIZE_BYTES,
+)
 from app.api.scans.helpers import scan_to_response
 from app.core.config import settings
 from app.core.db import get_db
@@ -39,11 +45,15 @@ def _normalize_stage(stage: dict) -> dict:
     if stage_id is None:
         stage_id = JENKINS_STAGE_NAME_TO_ID.get(stage.get("name"))
     if stage_id not in VALID_STAGES:
-        raise HTTPException(status_code=400, detail=f"Invalid stage identifier: {stage_id}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid stage identifier: {stage_id}"
+        )
 
     normalized_status = STAGE_STATUS_MAP.get(str(stage.get("status", "")).upper())
     if normalized_status is None:
-        raise HTTPException(status_code=400, detail=f"Invalid stage status: {stage.get('status')}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid stage status: {stage.get('status')}"
+        )
 
     return {
         "stage": stage_id,
@@ -60,9 +70,14 @@ def _validate_callback_artifacts(stages: list[dict]):
         artifact_url = stage.get("artifact_url")
         if artifact_url is not None:
             if not isinstance(artifact_url, str):
-                raise HTTPException(status_code=400, detail="artifact_url must be a string")
+                raise HTTPException(
+                    status_code=400, detail="artifact_url must be a string"
+                )
             if len(artifact_url) > MAX_ARTIFACT_URL_LENGTH:
-                raise HTTPException(status_code=400, detail="artifact_url exceeds maximum allowed length")
+                raise HTTPException(
+                    status_code=400,
+                    detail="artifact_url exceeds maximum allowed length",
+                )
             if not artifact_url.startswith(("http://", "https://", "/")):
                 raise HTTPException(
                     status_code=400,
@@ -72,16 +87,26 @@ def _validate_callback_artifacts(stages: list[dict]):
         artifact_size_bytes = stage.get("artifact_size_bytes")
         if artifact_size_bytes is not None:
             if not isinstance(artifact_size_bytes, int):
-                raise HTTPException(status_code=400, detail="artifact_size_bytes must be an integer")
+                raise HTTPException(
+                    status_code=400, detail="artifact_size_bytes must be an integer"
+                )
             if artifact_size_bytes < 0 or artifact_size_bytes > MAX_ARTIFACT_SIZE_BYTES:
-                raise HTTPException(status_code=400, detail="artifact_size_bytes is out of allowed range")
+                raise HTTPException(
+                    status_code=400,
+                    detail="artifact_size_bytes is out of allowed range",
+                )
 
         artifact_sha256 = stage.get("artifact_sha256")
         if artifact_sha256 is not None:
             if not isinstance(artifact_sha256, str) or len(artifact_sha256) != 64:
-                raise HTTPException(status_code=400, detail="artifact_sha256 must be a 64-char hex string")
+                raise HTTPException(
+                    status_code=400,
+                    detail="artifact_sha256 must be a 64-char hex string",
+                )
             if any(c not in "0123456789abcdefABCDEF" for c in artifact_sha256):
-                raise HTTPException(status_code=400, detail="artifact_sha256 must be hexadecimal")
+                raise HTTPException(
+                    status_code=400, detail="artifact_sha256 must be hexadecimal"
+                )
 
 
 @router.post("/scans/{scan_id}/callback")
@@ -98,9 +123,12 @@ def scan_callback(
     if not scan_obj:
         raise HTTPException(status_code=404, detail="Scan not found")
 
-    project_obj = db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    project_obj = (
+        db.query(ProjectDB).filter(ProjectDB.project_id == scan_obj.project_id).first()
+    )
     if project_obj:
         from app.api.scans.helpers import expire_scan_if_timed_out
+
         expire_scan_if_timed_out(db, scan_obj, project_obj)
 
     db.refresh(scan_obj)
@@ -127,6 +155,11 @@ def scan_callback(
     scan_obj.stage_results = normalized_stages
 
     jenkins_status = str(report.get("status", "")).upper()
+
+    build_number = report.get("build_number")
+    if build_number is None:
+        build_number = report.get("buildNumber")
+
     if jenkins_status == "RUNNING":
         # Jenkins confirmed build started - transition from CREATED to RUNNING
         scan_obj.state = ScanState.RUNNING
@@ -134,13 +167,28 @@ def scan_callback(
         logger.info(f"Scan {scan_id} transitioned to RUNNING state")
     elif jenkins_status == "SUCCESS":
         scan_obj.state = ScanState.COMPLETED
+
+        # Trigger async report processing
+        build_num = str(build_number) if build_number else None
+        if build_num:
+            from app.tasks.report_tasks import process_scan_reports_task
+            from app.core.config import settings
+
+            background_tasks.add_task(
+                process_scan_reports_task.delay,
+                scan_id=scan_id,
+                jenkins_build_number=build_num,
+                jenkins_base_url=settings.JENKINS_BASE_URL,
+            )
     elif jenkins_status in {"FAILURE", "ABORTED", "UNSTABLE"}:
         scan_obj.state = ScanState.FAILED
 
-        # Store error details from Jenkins callback (Phase 3 enhancement)
-        error_message = report.get("error_message")
-        error_type = report.get("error_type")
-        jenkins_console_url = report.get("jenkins_console_url")
+        # Store error details from Jenkins callback - accept both upper and lowercase keys
+        error_message = report.get("ERROR_MESSAGE") or report.get("error_message")
+        error_type = report.get("ERROR_TYPE") or report.get("error_type")
+        jenkins_console_url = report.get("JENKINS_CONSOLE_URL") or report.get(
+            "jenkins_console_url"
+        )
 
         if error_message:
             scan_obj.error_message = error_message
@@ -149,7 +197,9 @@ def scan_callback(
         if jenkins_console_url:
             scan_obj.jenkins_console_url = jenkins_console_url
 
-        logger.info(f"Scan {scan_id} failed with error type: {error_type}, message: {error_message}")
+        logger.info(
+            f"Scan {scan_id} failed with error type: {error_type}, message: {error_message}"
+        )
     else:
         raise HTTPException(status_code=400, detail="Invalid callback status")
 
@@ -171,7 +221,9 @@ def scan_callback(
     finished_at_str = report.get("finishedAt")
     if finished_at_str:
         try:
-            scan_obj.finished_at = datetime.fromisoformat(finished_at_str.replace("Z", "+00:00"))
+            scan_obj.finished_at = datetime.fromisoformat(
+                finished_at_str.replace("Z", "+00:00")
+            )
         except ValueError:
             scan_obj.finished_at = datetime.now(timezone.utc)
     elif scan_obj.state in TERMINAL_STATES:
@@ -186,7 +238,7 @@ def scan_callback(
         websocket_manager.send_scan_update,
         scan_id=scan_obj.scan_id,
         project_id=scan_obj.project_id,
-        data=scan_to_response(scan_obj)
+        data=scan_to_response(scan_obj),
     )
 
     return {"status": "success"}
