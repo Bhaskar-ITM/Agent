@@ -1,7 +1,8 @@
 import uuid
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from datetime import timedelta, timezone
+
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
@@ -20,7 +21,11 @@ ACTIVE_STATES = {
 }
 
 
-def _get_last_scan_map(db: Session) -> dict[str, str]:
+def _get_last_scan_map(db: Session) -> dict[str, dict]:
+    """
+    Performance Optimization (Bolt ⚡): Fetches scan_id and created_at in a single
+    batch query to avoid N+1 lookups in list_projects.
+    """
     subq = (
         db.query(
             ScanDB.project_id,
@@ -30,7 +35,7 @@ def _get_last_scan_map(db: Session) -> dict[str, str]:
         .subquery()
     )
     rows = (
-        db.query(ScanDB.project_id, ScanDB.scan_id)
+        db.query(ScanDB.project_id, ScanDB.scan_id, ScanDB.created_at)
         .join(
             subq,
             and_(
@@ -40,29 +45,40 @@ def _get_last_scan_map(db: Session) -> dict[str, str]:
         )
         .all()
     )
-    return {row.project_id: row.scan_id for row in rows}
+    return {
+        row.project_id: {"scan_id": row.scan_id, "created_at": row.created_at}
+        for row in rows
+    }
 
 
 @router.get("/projects", response_model=list[dict])
 def list_projects(db: Session = Depends(get_db)):
+    """
+    Performance Optimization (Bolt ⚡): Eliminates N+1 query bottleneck by using
+    pre-fetched scan data and batching project lookups.
+    """
     last_scan_map = _get_last_scan_map(db)
     db_projects = db.query(ProjectDB).all()
+
+    # Pre-calculate constants for IST conversion
+    ist_delta = timedelta(hours=5, minutes=30)
+
     projects = []
     for p in db_projects:
-        last_scan_id = last_scan_map.get(p.project_id)
+        scan_data = last_scan_map.get(p.project_id)
+        last_scan_id = None
         last_scan_time = None
-        if last_scan_id:
-            last_scan = db.query(ScanDB).filter(ScanDB.scan_id == last_scan_id).first()
-            if last_scan and last_scan.created_at:
-                # Convert UTC to IST (UTC+5:30)
-                dt = last_scan.created_at
-                if dt.tzinfo is None:
-                    from datetime import timezone, timedelta
 
+        if scan_data:
+            last_scan_id = scan_data["scan_id"]
+            dt = scan_data["created_at"]
+            if dt:
+                if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
-                # Add 5:30 hours for IST
-                ist_dt = dt + timedelta(hours=5, minutes=30)
+                # Convert UTC to IST (UTC+5:30)
+                ist_dt = dt + ist_delta
                 last_scan_time = ist_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
         projects.append(
             {
                 "project_id": p.project_id,

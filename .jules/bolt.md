@@ -1,0 +1,3 @@
+## 2025-05-15 - N+1 Query Bottleneck in Project Listing
+**Learning:** The `list_projects` endpoint suffered from an N+1 query pattern where it fetched the latest scan details individually for each project. In SQLite, this is relatively fast (~100-200ms for 5000 projects), but in a production environment with a networked database (PostgreSQL), the round-trip latency would cause significant dashboard slowdowns as the number of projects grows.
+**Action:** Always use batch fetching or subquery joins (like `_get_last_scan_map`) to retrieve related data for lists. Consolidating O(N) queries into O(1) or O(Constant) is critical for dashboard scalability.
