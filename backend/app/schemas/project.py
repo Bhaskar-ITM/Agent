@@ -1,5 +1,27 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, List
+
+class SeveritySummary(BaseModel):
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    info: int = 0
+
+class ToolSummary(BaseModel):
+    tool: str
+    findings: int
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    link: Optional[str] = None
+
+class ReportSummarySchema(BaseModel):
+    project_id: str
+    total_findings: int
+    severity: SeveritySummary
+    tools: List[ToolSummary]
 
 class ProjectCreate(BaseModel):
     name: str
@@ -24,3 +46,5 @@ class ProjectResponse(ProjectCreate):
     status: str = "CREATED"
     last_scan_state: Optional[str] = None
     last_scan_id: Optional[str] = None
+    last_scan_time: Optional[str] = None
+    report_summary: Optional[ReportSummarySchema] = None

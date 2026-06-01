@@ -15,7 +15,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { useToast } from "../components/Toast";
 
-const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSummaries: Record<string, ReportSummary> }) => {
+const ProjectRow = ({ project }: { project: Project }) => {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -98,7 +98,7 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
     : "--";
 
   // Get report summary for this project
-  const reportSummary = reportSummaries[project.project_id];
+  const reportSummary = project.report_summary;
   
   // Calculate severity color based on highest severity found
   const getSeverityColor = (severity: SeveritySummary) => {
@@ -248,35 +248,6 @@ const DashboardPage = () => {
     queryFn: api.projects.list,
   });
 
-  // Fetch report summaries for all projects
-  const { data: reportSummaries = {}, isLoading: reportsLoading } = useQuery({
-    queryKey: ["report-summaries"],
-    queryFn: async () => {
-      // Fetch summaries for all projects in parallel
-      const summaryPromises = projects
-        .filter((project) => project.project_id)
-        .map((project) => 
-          api.reports.getSummary(project.project_id).then(
-            (summary) => [project.project_id, summary] as const
-          )
-        );
-      
-      const results = await Promise.allSettled(summaryPromises);
-      const summaries: Record<string, ReportSummary> = {};
-      
-      results.forEach((result) => {
-        if (result.status === "fulfilled") {
-          const [projectId, summary] = result.value;
-          summaries[projectId] = summary;
-        }
-      });
-      
-      return summaries;
-    },
-    // Only refetch when projects change
-    enabled: !!projects.length,
-  });
-
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const hasActiveScan = useMemo(
@@ -292,9 +263,7 @@ const DashboardPage = () => {
     );
   }, [projects, debouncedSearchTerm]);
 
-  const isLoading = loading || reportsLoading;
-
-  if (isLoading) return <PageSkeleton type="dashboard" />;
+  if (loading) return <PageSkeleton type="dashboard" />;
 
   return (
     <div className="max-w-6xl mx-auto p-8">
@@ -327,19 +296,21 @@ const DashboardPage = () => {
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
         <div className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-900 transition-colors" />
             <input
               type="text"
+              aria-label="Search projects"
               placeholder="Search projects by name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/5"
+              className="w-full pl-10 pr-10 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/5 transition-all"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label="Clear search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -359,13 +330,24 @@ const DashboardPage = () => {
               ? `No projects matching "${debouncedSearchTerm}"`
               : "Start by adding your first project to scan."}
           </p>
-          <Link
-            to="/projects/create"
-            className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-sm font-medium inline-flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Project
-          </Link>
+          <div className="flex flex-col items-center gap-4">
+            {debouncedSearchTerm ? (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="text-slate-900 font-medium text-sm hover:underline"
+              >
+                Reset Filter
+              </button>
+            ) : (
+              <Link
+                to="/projects/create"
+                className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-sm font-medium inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Project
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -391,7 +373,6 @@ const DashboardPage = () => {
   <ProjectRow 
     key={project.project_id} 
     project={project} 
-    reportSummaries={reportSummaries} 
   />
 ))}
             </tbody>

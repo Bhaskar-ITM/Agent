@@ -1,0 +1,3 @@
+## 2025-05-22 - Dashboard N+1 Bottleneck Elimination
+**Learning:** The dashboard was suffering from a double N+1 problem: the backend performed redundant queries per project to find the last scan, and the frontend performed a separate API request per project to fetch report summaries. This created significant latency as the number of projects grew.
+**Action:** Always batch-fetch related data for list views. Use joined subqueries on the backend to identify latest related records and `IN` clauses to fetch associated metadata in a single trip. Consolidate frequently used summary data into the primary list response to minimize frontend network overhead.
