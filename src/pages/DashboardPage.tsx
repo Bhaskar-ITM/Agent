@@ -15,7 +15,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { useToast } from "../components/Toast";
 
-const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSummaries: Record<string, ReportSummary> }) => {
+const ProjectRow = ({ project }: { project: Project }) => {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -97,8 +97,8 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
       })
     : "--";
 
-  // Get report summary for this project
-  const reportSummary = reportSummaries[project.project_id];
+  // Performance Optimization (Bolt ⚡): Report summary is now inlined in the project object
+  const reportSummary = project.report_summary;
   
   // Calculate severity color based on highest severity found
   const getSeverityColor = (severity: SeveritySummary) => {
@@ -248,35 +248,6 @@ const DashboardPage = () => {
     queryFn: api.projects.list,
   });
 
-  // Fetch report summaries for all projects
-  const { data: reportSummaries = {}, isLoading: reportsLoading } = useQuery({
-    queryKey: ["report-summaries"],
-    queryFn: async () => {
-      // Fetch summaries for all projects in parallel
-      const summaryPromises = projects
-        .filter((project) => project.project_id)
-        .map((project) => 
-          api.reports.getSummary(project.project_id).then(
-            (summary) => [project.project_id, summary] as const
-          )
-        );
-      
-      const results = await Promise.allSettled(summaryPromises);
-      const summaries: Record<string, ReportSummary> = {};
-      
-      results.forEach((result) => {
-        if (result.status === "fulfilled") {
-          const [projectId, summary] = result.value;
-          summaries[projectId] = summary;
-        }
-      });
-      
-      return summaries;
-    },
-    // Only refetch when projects change
-    enabled: !!projects.length,
-  });
-
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const hasActiveScan = useMemo(
@@ -292,7 +263,7 @@ const DashboardPage = () => {
     );
   }, [projects, debouncedSearchTerm]);
 
-  const isLoading = loading || reportsLoading;
+  const isLoading = loading;
 
   if (isLoading) return <PageSkeleton type="dashboard" />;
 
@@ -331,6 +302,7 @@ const DashboardPage = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
+              aria-label="Search projects"
               placeholder="Search projects by name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -339,6 +311,7 @@ const DashboardPage = () => {
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
@@ -352,11 +325,11 @@ const DashboardPage = () => {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
           <Search className="w-10 h-10 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-900 mb-2">
-            {debouncedSearchTerm ? "No projects found" : "No projects yet"}
+            {debouncedSearchTerm ? "No matches found" : "No projects yet"}
           </h3>
           <p className="text-slate-500 mb-6">
             {debouncedSearchTerm
-              ? `No projects matching "${debouncedSearchTerm}"`
+              ? `Try adjusting your search terms for "${debouncedSearchTerm}"`
               : "Start by adding your first project to scan."}
           </p>
           <Link
@@ -391,7 +364,6 @@ const DashboardPage = () => {
   <ProjectRow 
     key={project.project_id} 
     project={project} 
-    reportSummaries={reportSummaries} 
   />
 ))}
             </tbody>
