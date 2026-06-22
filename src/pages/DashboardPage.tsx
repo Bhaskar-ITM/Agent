@@ -15,7 +15,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { useToast } from "../components/Toast";
 
-const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSummaries: Record<string, ReportSummary> }) => {
+const ProjectRow = ({ project }: { project: Project }) => {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -97,8 +97,8 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
       })
     : "--";
 
-  // Get report summary for this project
-  const reportSummary = reportSummaries[project.project_id];
+  // Get report summary from the inlined project data
+  const reportSummary = project.report_summary;
   
   // Calculate severity color based on highest severity found
   const getSeverityColor = (severity: SeveritySummary) => {
@@ -243,38 +243,9 @@ const DashboardPage = () => {
     },
   });
 
-  const { data: projects = [], isLoading: loading } = useQuery({
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: api.projects.list,
-  });
-
-  // Fetch report summaries for all projects
-  const { data: reportSummaries = {}, isLoading: reportsLoading } = useQuery({
-    queryKey: ["report-summaries"],
-    queryFn: async () => {
-      // Fetch summaries for all projects in parallel
-      const summaryPromises = projects
-        .filter((project) => project.project_id)
-        .map((project) => 
-          api.reports.getSummary(project.project_id).then(
-            (summary) => [project.project_id, summary] as const
-          )
-        );
-      
-      const results = await Promise.allSettled(summaryPromises);
-      const summaries: Record<string, ReportSummary> = {};
-      
-      results.forEach((result) => {
-        if (result.status === "fulfilled") {
-          const [projectId, summary] = result.value;
-          summaries[projectId] = summary;
-        }
-      });
-      
-      return summaries;
-    },
-    // Only refetch when projects change
-    enabled: !!projects.length,
   });
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -291,8 +262,6 @@ const DashboardPage = () => {
       project.name.toLowerCase().includes(lowerSearch)
     );
   }, [projects, debouncedSearchTerm]);
-
-  const isLoading = loading || reportsLoading;
 
   if (isLoading) return <PageSkeleton type="dashboard" />;
 
@@ -391,7 +360,6 @@ const DashboardPage = () => {
   <ProjectRow 
     key={project.project_id} 
     project={project} 
-    reportSummaries={reportSummaries} 
   />
 ))}
             </tbody>

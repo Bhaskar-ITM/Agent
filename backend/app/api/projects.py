@@ -7,7 +7,7 @@ from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.core.db import get_db
-from app.models.db_models import ProjectDB, ScanDB
+from app.models.db_models import ProjectDB, ScanDB, ScanReportDB
 from app.core.config import settings
 from app.state.scan_state import ScanState
 
@@ -20,7 +20,10 @@ ACTIVE_STATES = {
 }
 
 
-def _get_last_scan_map(db: Session) -> dict[str, str]:
+def _get_last_scan_map(db: Session) -> dict[str, dict]:
+    """
+    Performance Optimization (Bolt ⚡): Fetches last scan metadata for all projects in a single batch query.
+    """
     subq = (
         db.query(
             ScanDB.project_id,
@@ -30,7 +33,7 @@ def _get_last_scan_map(db: Session) -> dict[str, str]:
         .subquery()
     )
     rows = (
-        db.query(ScanDB.project_id, ScanDB.scan_id)
+        db.query(ScanDB.project_id, ScanDB.scan_id, ScanDB.created_at)
         .join(
             subq,
             and_(
@@ -40,36 +43,107 @@ def _get_last_scan_map(db: Session) -> dict[str, str]:
         )
         .all()
     )
-    return {row.project_id: row.scan_id for row in rows}
+    return {
+        row.project_id: {"scan_id": row.scan_id, "created_at": row.created_at}
+        for row in rows
+    }
 
 
-@router.get("/projects", response_model=list[dict])
+@router.get("/projects", response_model=list[ProjectResponse])
 def list_projects(db: Session = Depends(get_db)):
+    """
+    Performance Optimization (Bolt ⚡):
+    1. Eliminates N+1 query bottleneck by fetching all last scans in a single batch.
+    2. Batch fetches and inlines report summaries for all projects.
+    3. Pre-calculates IST delta to avoid redundant object creation.
+    """
     last_scan_map = _get_last_scan_map(db)
     db_projects = db.query(ProjectDB).all()
+
+    # Pre-calculate IST delta
+    ist_delta = timedelta(hours=5, minutes=30)
+
+    # Batch fetch only reports for the last scans of these projects
+    last_scan_ids = [info["scan_id"] for info in last_scan_map.values() if info.get("scan_id")]
+    all_reports = (
+        db.query(ScanReportDB)
+        .filter(ScanReportDB.scan_id.in_(last_scan_ids))
+        .all()
+    )
+
+    # Group reports by project_id and scan_id
+    reports_by_project_scan = {}
+    for r in all_reports:
+        key = (r.project_id, r.scan_id)
+        if key not in reports_by_project_scan:
+            reports_by_project_scan[key] = []
+        reports_by_project_scan[key].append(r)
+
     projects = []
     for p in db_projects:
-        last_scan_id = last_scan_map.get(p.project_id)
+        scan_info = last_scan_map.get(p.project_id)
+        last_scan_id = scan_info["scan_id"] if scan_info else None
         last_scan_time = None
-        if last_scan_id:
-            last_scan = db.query(ScanDB).filter(ScanDB.scan_id == last_scan_id).first()
-            if last_scan and last_scan.created_at:
-                # Convert UTC to IST (UTC+5:30)
-                dt = last_scan.created_at
-                if dt.tzinfo is None:
-                    from datetime import timezone, timedelta
 
-                    dt = dt.replace(tzinfo=timezone.utc)
-                # Add 5:30 hours for IST
-                ist_dt = dt + timedelta(hours=5, minutes=30)
-                last_scan_time = ist_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        if scan_info and scan_info["created_at"]:
+            dt = scan_info["created_at"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ist_dt = dt + ist_delta
+            last_scan_time = ist_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        # Inline report summary if available for the last scan
+        report_summary = None
+        if last_scan_id:
+            scan_reports = reports_by_project_scan.get((p.project_id, last_scan_id), [])
+            if scan_reports:
+                total_findings = 0
+                severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+                tools_summary = []
+
+                for r in scan_reports:
+                    summary = r.severity_summary or {}
+                    findings_count = sum(summary.values())
+                    total_findings += findings_count
+
+                    for sev in severity_counts:
+                        severity_counts[sev] += summary.get(sev, 0)
+
+                    tool_link = r.report_url if r.tool_name == "sonar" else None
+                    tools_summary.append(
+                        {
+                            "tool": r.tool_name,
+                            "findings": findings_count,
+                            "critical": summary.get("critical", 0),
+                            "high": summary.get("high", 0),
+                            "medium": summary.get("medium", 0),
+                            "low": summary.get("low", 0),
+                            "link": tool_link,
+                        }
+                    )
+
+                report_summary = {
+                    "project_id": p.project_id,
+                    "total_findings": total_findings,
+                    "severity": severity_counts,
+                    "tools": tools_summary,
+                }
+
         projects.append(
             {
                 "project_id": p.project_id,
                 "name": p.name,
+                "git_url": p.git_url,
+                "branch": p.branch,
+                "credentials_id": p.credentials_id,
+                "sonar_key": p.sonar_key,
+                "target_ip": p.target_ip,
+                "target_url": p.target_url,
+                "status": p.status,
                 "last_scan_state": p.last_scan_state,
                 "last_scan_id": last_scan_id,
                 "last_scan_time": last_scan_time,
+                "report_summary": report_summary,
             }
         )
     return projects
