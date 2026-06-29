@@ -23,6 +23,10 @@ export type Project = {
   last_scan_state?: string;
   last_scan_id?: string;
   last_scan_time?: string;
+  report_summary?: {
+    total_findings: number;
+    severity: SeveritySummary;
+  };
 };
 
 export type Scan = {
