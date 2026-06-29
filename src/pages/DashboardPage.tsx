@@ -15,7 +15,7 @@ import { useDebounce } from "../hooks/useDebounce";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { useToast } from "../components/Toast";
 
-const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSummaries: Record<string, ReportSummary> }) => {
+const ProjectRow = ({ project }: { project: Project }) => {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -97,8 +97,9 @@ const ProjectRow = ({ project, reportSummaries }: { project: Project; reportSumm
       })
     : "--";
 
-  // Get report summary for this project
-  const reportSummary = reportSummaries[project.project_id];
+  // Use inlined report summary
+  // Performance Optimization (Bolt ⚡): Eliminated separate API call per project by using inlined data.
+  const reportSummary = project.report_summary;
   
   // Calculate severity color based on highest severity found
   const getSeverityColor = (severity: SeveritySummary) => {
@@ -243,38 +244,9 @@ const DashboardPage = () => {
     },
   });
 
-  const { data: projects = [], isLoading: loading } = useQuery({
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: api.projects.list,
-  });
-
-  // Fetch report summaries for all projects
-  const { data: reportSummaries = {}, isLoading: reportsLoading } = useQuery({
-    queryKey: ["report-summaries"],
-    queryFn: async () => {
-      // Fetch summaries for all projects in parallel
-      const summaryPromises = projects
-        .filter((project) => project.project_id)
-        .map((project) => 
-          api.reports.getSummary(project.project_id).then(
-            (summary) => [project.project_id, summary] as const
-          )
-        );
-      
-      const results = await Promise.allSettled(summaryPromises);
-      const summaries: Record<string, ReportSummary> = {};
-      
-      results.forEach((result) => {
-        if (result.status === "fulfilled") {
-          const [projectId, summary] = result.value;
-          summaries[projectId] = summary;
-        }
-      });
-      
-      return summaries;
-    },
-    // Only refetch when projects change
-    enabled: !!projects.length,
   });
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -291,8 +263,6 @@ const DashboardPage = () => {
       project.name.toLowerCase().includes(lowerSearch)
     );
   }, [projects, debouncedSearchTerm]);
-
-  const isLoading = loading || reportsLoading;
 
   if (isLoading) return <PageSkeleton type="dashboard" />;
 
@@ -332,6 +302,7 @@ const DashboardPage = () => {
             <input
               type="text"
               placeholder="Search projects by name..."
+              aria-label="Search projects"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/5"
@@ -339,6 +310,7 @@ const DashboardPage = () => {
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
@@ -352,11 +324,11 @@ const DashboardPage = () => {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
           <Search className="w-10 h-10 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-900 mb-2">
-            {debouncedSearchTerm ? "No projects found" : "No projects yet"}
+            {debouncedSearchTerm ? "No matches found" : "No projects yet"}
           </h3>
           <p className="text-slate-500 mb-6">
             {debouncedSearchTerm
-              ? `No projects matching "${debouncedSearchTerm}"`
+              ? `Try adjusting your search terms or filters to find what you're looking for.`
               : "Start by adding your first project to scan."}
           </p>
           <Link
@@ -391,7 +363,6 @@ const DashboardPage = () => {
   <ProjectRow 
     key={project.project_id} 
     project={project} 
-    reportSummaries={reportSummaries} 
   />
 ))}
             </tbody>
