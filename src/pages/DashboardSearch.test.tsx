@@ -81,7 +81,7 @@ describe("DashboardPage Search", () => {
     expect(screen.queryByText("Gamma Project")).not.toBeInTheDocument();
   });
 
-  it('shows "No matches found" message after debounce', async () => {
+  it('shows "No projects found" message after debounce', async () => {
     render(
       <ToastProvider>
         <QueryClientProvider client={queryClient}>
@@ -106,9 +106,9 @@ describe("DashboardPage Search", () => {
     });
 
     expect(screen.queryByText("Alpha Project")).not.toBeInTheDocument();
-    expect(screen.getByText("No matches found")).toBeInTheDocument();
+    expect(screen.getByText("No projects found")).toBeInTheDocument();
     expect(
-      screen.getByText(/Try adjusting your search terms/),
+      screen.getByText(/No projects matching "Zeta"/),
     ).toBeInTheDocument();
   });
 

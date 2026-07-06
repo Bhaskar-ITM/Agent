@@ -20,7 +20,11 @@ ACTIVE_STATES = {
 }
 
 
-def _get_last_scan_map(db: Session) -> dict[str, str]:
+def _get_last_scan_map(db: Session) -> dict[str, ScanDB]:
+    """
+    Performance Optimization (Bolt ⚡): Fetches full ScanDB objects in a single query
+    to avoid N+1 queries when accessing scan metadata like timestamps.
+    """
     subq = (
         db.query(
             ScanDB.project_id,
@@ -30,7 +34,7 @@ def _get_last_scan_map(db: Session) -> dict[str, str]:
         .subquery()
     )
     rows = (
-        db.query(ScanDB.project_id, ScanDB.scan_id)
+        db.query(ScanDB)
         .join(
             subq,
             and_(
@@ -40,29 +44,86 @@ def _get_last_scan_map(db: Session) -> dict[str, str]:
         )
         .all()
     )
-    return {row.project_id: row.scan_id for row in rows}
+    return {row.project_id: row for row in rows}
 
 
 @router.get("/projects", response_model=list[dict])
 def list_projects(db: Session = Depends(get_db)):
+    """
+    Performance Optimization (Bolt ⚡):
+    1. Eliminates N+1 queries by batch-fetching latest scans and their report summaries.
+    2. Reduces frontend network requests (1+N -> 1) by inlining report data.
+    3. Minimizes object overhead by hoisting IST delta calculation.
+    """
+    from app.models.db_models import ScanReportDB
+
     last_scan_map = _get_last_scan_map(db)
     db_projects = db.query(ProjectDB).all()
+
+    # Batch fetch all report summaries for the latest scans
+    last_scan_ids = [s.scan_id for s in last_scan_map.values()]
+    reports = []
+    if last_scan_ids:
+        reports = db.query(ScanReportDB).filter(ScanReportDB.scan_id.in_(last_scan_ids)).all()
+
+    # Organize reports by scan_id
+    reports_by_scan = {}
+    for r in reports:
+        if r.scan_id not in reports_by_scan:
+            reports_by_scan[r.scan_id] = []
+        reports_by_scan[r.scan_id].append(r)
+
+    ist_delta = timedelta(hours=5, minutes=30)
     projects = []
+
     for p in db_projects:
-        last_scan_id = last_scan_map.get(p.project_id)
+        last_scan = last_scan_map.get(p.project_id)
+        last_scan_id = last_scan.scan_id if last_scan else None
         last_scan_time = None
-        if last_scan_id:
-            last_scan = db.query(ScanDB).filter(ScanDB.scan_id == last_scan_id).first()
-            if last_scan and last_scan.created_at:
-                # Convert UTC to IST (UTC+5:30)
+        report_summary = None
+
+        if last_scan:
+            # Timestamp processing
+            if last_scan.created_at:
                 dt = last_scan.created_at
                 if dt.tzinfo is None:
-                    from datetime import timezone, timedelta
-
                     dt = dt.replace(tzinfo=timezone.utc)
-                # Add 5:30 hours for IST
-                ist_dt = dt + timedelta(hours=5, minutes=30)
+                ist_dt = dt + ist_delta
                 last_scan_time = ist_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+            # Report summary inlining
+            scan_reports = reports_by_scan.get(last_scan.scan_id, [])
+            if scan_reports:
+                total_findings = 0
+                severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+                tools = []
+
+                for r in scan_reports:
+                    summary = r.severity_summary or {}
+                    findings_count = sum(summary.values())
+                    total_findings += findings_count
+
+                    for k in severity:
+                        severity[k] += summary.get(k, 0)
+
+                    tool_link = r.report_url if r.tool_name == "sonar" else None
+                    tools.append({
+                        "tool": r.tool_name,
+                        "findings": findings_count,
+                        "critical": summary.get("critical", 0),
+                        "high": summary.get("high", 0),
+                        "medium": summary.get("medium", 0),
+                        "low": summary.get("low", 0),
+                        "link": tool_link
+                    })
+
+                report_summary = {
+                    "project_id": p.project_id,
+                    "total_findings": total_findings,
+                    "severity": severity,
+                    "tools": tools
+                }
+
         projects.append(
             {
                 "project_id": p.project_id,
@@ -70,6 +131,7 @@ def list_projects(db: Session = Depends(get_db)):
                 "last_scan_state": p.last_scan_state,
                 "last_scan_id": last_scan_id,
                 "last_scan_time": last_scan_time,
+                "report_summary": report_summary
             }
         )
     return projects
